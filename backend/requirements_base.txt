@@ -1,0 +1,7 @@
+# --- Backend ---
+sqlalchemy>=2.0.27
+psycopg2-binary>=2.9.9
+alembic>=1.13.1
+pandas
+celery==5.3.6
+redis==5.0.4

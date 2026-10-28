@@ -1,0 +1,52 @@
+# =========================
+# Python & FastAPI Backend
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Віртуальні середовища (Virtual Environments)
+venv/
+.venv/
+env/
+.env
+
+# Папка з файлами користувачів (дуже важливо не пушити важкі моделі в Git!)
+uploaded_models/
+app/uploaded_models/
+VisionMetricsApp/uploaded_models/
+
+# Бази даних (якщо колись використаєш SQLite для тестів)
+*.db
+*.sqlite3
+
+# =========================
+# Node.js & Vue.js Frontend
+# =========================
+# Залежності
+node_modules/
+
+# Зібраний (сcomplied) фронтенд
+dist/
+dist-ssr/
+*.local
+
+# Логи NPM
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =========================
+# ОС та Редактори коду (IDEs)
+# =========================
+# Mac OS
+.DS_Store
+
+# VS Code, PyCharm, WebStorm та інші
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

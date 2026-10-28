@@ -1,0 +1,9 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+COPY requirements_base.txt ./
+RUN apt-get update && apt-get install -y libhdf5-dev \
+    && pip install --no-cache-dir -r requirements_base.txt
+
+EXPOSE 8000
