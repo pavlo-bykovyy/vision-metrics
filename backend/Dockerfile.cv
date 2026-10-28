@@ -1,0 +1,12 @@
+FROM visionmetrics_base_image:latest
+
+COPY requirements_*.txt ./
+
+RUN pip install --upgrade pip && \
+    pip install --default-timeout=1000 --no-cache-dir -r requirements_cv.txt
+
+COPY . .
+
+RUN chmod +x entrypoint.sh
+
+ENTRYPOINT ["./entrypoint.sh"]
