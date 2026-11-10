@@ -1,5 +1,6 @@
 import csv
 import json
+import os
 from typing import Iterator
 
 from shared import models, enums
@@ -37,10 +38,23 @@ def load_prompts_from_dataset(dataset: 'models.Dataset') -> Iterator[dict]:
 
     file_path = dataset.file_artifact.file_path
     schema_config = dataset.schema_config or {}
+    mapping_config = dataset.mapping_config or {}
 
-    input_fields = schema_config.get("input_fields", [])
-    target_fields = schema_config.get("target_fields", [])
-    metadata_fields = schema_config.get("metadata_fields", [])
+    id_column = (
+        dataset.id_column
+        or schema_config.get("id_column")
+        or mapping_config.get("id_column")
+    )
+
+    input_fields = list(schema_config.get("input_fields") or [])
+    if not input_fields:
+        if mapping_config.get("input_column"):
+            input_fields = [mapping_config["input_column"]]
+        elif schema_config.get("kind") == "attack":
+            input_fields = ["input_text"]
+
+    target_fields = list(schema_config.get("target_fields") or [])
+    metadata_fields = list(schema_config.get("metadata_fields") or [])
 
     if dataset.file_format == enums.DatasetFormat.CSV:
         yield from _stream_csv(file_path, id_column, input_fields, target_fields, metadata_fields)
@@ -125,7 +139,11 @@ def _stream_jsonl(file_path: str, id_column: str, input_fields: list, target_fie
 
             inputs = {field: row.get(field) for field in input_fields if field in row}
             targets = {field: row.get(field) for field in target_fields if field in row}
-            metadata = {field: row.get(field) for field in metadata_fields if field in row}
+            if metadata_fields:
+                metadata = {field: row.get(field) for field in metadata_fields if field in row}
+            else:
+                excluded = set(input_fields) | set(target_fields) | ({id_column} if id_column else set())
+                metadata = {k: v for k, v in row.items() if k not in excluded}
 
             if any(inputs.values()):
                 yield {

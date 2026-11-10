@@ -104,7 +104,7 @@ import EvaluationJudgeSelector from '@/components/EvaluationJudgeSelector.vue'
 
 import { useDatasets } from '@/composables/useDatasets'
 import { useLoraAdapter } from '@/composables/useLoraAdapter'
-import { useLoraEvaluation } from '@/composables/useLoraEvaluation'
+import { useLoraEvaluations } from '@/composables/useLoraEvaluations.js'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -134,7 +134,7 @@ const jsonError = ref('')
 
 const { datasets, fetchDatasets } = useDatasets(API_URL)
 const { baseModelId, isFetchingModel, fetchAdapterDetails } = useLoraAdapter(API_URL)
-const { isGenerating, generateError, submitEvaluation } = useLoraEvaluation(API_URL)
+const { isGenerating, generateError, submitEvaluation } = useLoraEvaluations(API_URL)
 
 onMounted(() => {
   fetchDatasets()

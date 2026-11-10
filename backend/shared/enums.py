@@ -47,7 +47,14 @@ class DatasetSource(str, enum.Enum):
     KAGGLE = "kaggle"
     HUGGING_FACE = "hugging_face"
 
-class EvaluationType(enum.Enum):
+class EvaluationType(str, enum.Enum):
     NONE = "none"
     BASE_MODEL = "base_model"
     LORA = "lora"
+
+
+class TaskCategory(str, enum.Enum):
+    NONE = "none"
+    STANDARD = "standard"
+    ATTACK = "attack"
+

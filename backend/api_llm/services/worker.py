@@ -34,3 +34,6 @@ def worker_evaluate(self, evaluation_task_id: int):
     except Exception as e:
         logger.warning(f"Worker failed for evaluation_task_id {evaluation_task_id}: {e}")
         update_status_to_failed(evaluation_task_id, str(e))
+    finally:
+        from api_llm.utils.memory import clear_cuda_cache
+        clear_cuda_cache()

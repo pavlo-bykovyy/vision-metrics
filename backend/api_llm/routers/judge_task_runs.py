@@ -9,16 +9,32 @@ from api_llm.judge import judge_task_runs_services
 router = APIRouter(prefix="/judge-runs", tags=["Judge Task Runs Management"])
 
 
-@router.get("/evaluation-tasks/", response_model=schemas.EvaluationTaskListResponse)
-def get_evaluation_tasks_for_judge(
+@router.get("/judge-runs/", response_model=schemas.TaskListResponse)
+def get_judge_runs(
         size: int = 100,
         db: Session = Depends(get_db)
 ):
     """
-    Retrieves evaluation tasks to populate the dropdown in the Judge UI.
-    Delegates the data fetching logic to the service layer.
+    Retrieves judge runs for the Judge Tasks table.
+
+    Replaces the previous ``GET /judge-runs/`` handler. Delegates the data
+    fetching and mapping logic to the service layer.
     """
-    return judge_task_runs_services.get_evaluation_tasks_for_judge_ui(db=db, size=size)
+    return judge_task_runs_services.list_judge_runs(db=db, size=size)
+
+
+@router.get("/evaluation-tasks/list", response_model=schemas.TaskListResponse)
+def get_evaluation_tasks(
+        size: int = 100,
+        db: Session = Depends(get_db)
+):
+    """
+    Retrieves evaluation tasks for a tasks table using the universal list shape.
+
+    Unlike ``GET /evaluation-tasks/``, which feeds the Judge dropdown with full
+    task details, this endpoint returns flat rows ready for ``TasksTable``.
+    """
+    return judge_task_runs_services.list_evaluation_tasks(db=db, size=size)
 
 @router.post("/", response_model=schemas.JudgeTaskRunResponse, status_code=status.HTTP_201_CREATED)
 def create_judge_run_endpoint(
@@ -46,6 +62,26 @@ def get_judge_runs(
     Returns a paginated list of all automated judge tasks.
     """
     return judge_task_runs_services.get_paginated_judge_runs(db=db, page=page, size=size)
+
+@router.get("/{run_id}", response_model=schemas.JudgeTaskRunResponse)
+def get_judge_run_endpoint(run_id: int, db: Session = Depends(get_db)):
+    """
+    Returns details of a single judge task run.
+    """
+    return judge_task_runs_services.get_judge_run(db=db, run_id=run_id)
+
+@router.get("/{run_id}/results", response_model=schemas.JudgeRunResultsPaginationResponse)
+def get_judge_run_results_endpoint(
+        run_id: int,
+        page: int = 1,
+        size: int = 50,
+        db: Session = Depends(get_db)
+):
+    """
+    Returns paginated judge verdicts (scores + reasoning) for a judge task run,
+    together with the evaluated input/generated text.
+    """
+    return judge_task_runs_services.get_judge_run_results(db=db, run_id=run_id, page=page, size=size)
 
 @router.post("/{run_id}/cancel", response_model=schemas.JudgeTaskRunResponse)
 def cancel_judge_run_endpoint(run_id: int, db: Session = Depends(get_db)):

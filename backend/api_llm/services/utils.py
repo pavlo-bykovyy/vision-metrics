@@ -58,12 +58,23 @@ def prepare_prompts(task: 'models.EvaluationTask', db: 'Session') -> Iterator[di
         if not dataset:
             raise ValueError(f"Dataset {task.dataset_id} not found.")
 
-        if not dataset.file_artifact:
-            raise ValueError(f"Dataset {task.dataset_id} has no associated file artifact.")
+        is_attack_task = (
+            getattr(task, "task_category", None) == enums.TaskCategory.ATTACK
+            or (dataset.schema_config or {}).get("kind") == "attack"
+        )
 
-        file_path = dataset.file_artifact.file_path
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Dataset file missing: {file_path}")
+        if is_attack_task and (
+            not dataset.file_artifact or not os.path.exists(dataset.file_artifact.file_path)
+        ):
+            from api_llm.attacks.attack_dataset_files import ensure_attack_dataset_file
+            file_path = ensure_attack_dataset_file(dataset, db)
+            db.refresh(dataset)
+        else:
+            if not dataset.file_artifact:
+                raise ValueError(f"Dataset {task.dataset_id} has no associated file artifact.")
+            file_path = dataset.file_artifact.file_path
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"Dataset file missing: {file_path}")
 
         logger.info(f"[Task {task.id}] Loading dataset from {file_path}")
 

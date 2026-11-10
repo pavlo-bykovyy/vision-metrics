@@ -4,7 +4,13 @@ from sqlalchemy.orm import Session, joinedload
 from shared import schemas, models, enums
 from shared.dependencies import verify_token
 from shared.database import get_db
-from api_llm.services.service import create_evaluation_task, cancel_evaluation_task, delete_task_record
+from api_llm.services.service import (
+    create_evaluation_task,
+    cancel_evaluation_task,
+    delete_task_record,
+    TaskNotFoundError,
+    TaskCancelError,
+)
 from shared.utils.logger import get_logger
 from api_llm.services.evaluation_results_service import get_paginated_evaluation_results
 
@@ -21,7 +27,10 @@ def get_all_evaluation_tasks(
 ):
     """Retrieves all evaluation tasks from the database."""
     tasks = db.query(models.EvaluationTask) \
-        .filter(models.EvaluationTask.evaluation_type == enums.EvaluationType.LORA) \
+        .filter(
+            models.EvaluationTask.evaluation_type == enums.EvaluationType.LORA,
+            models.EvaluationTask.task_category == enums.TaskCategory.STANDARD,
+        ) \
         .order_by(models.EvaluationTask.created_at.desc()) \
         .all()
 
@@ -46,6 +55,7 @@ def get_all_evaluation_tasks(
 
     return schemas.EvaluationTaskListResponse(tasks=result)
 
+
 @router.post("/")
 async def start_evaluation(
         request: schemas.EvaluateRequest,
@@ -54,15 +64,19 @@ async def start_evaluation(
     """Initializes a background task for LoRA adapter evaluation."""
     return create_evaluation_task(request=request, db=db)
 
+
 @router.get("/{task_id}", response_model=schemas.EvaluationTaskResponse)
 async def get_evaluation_status(
-        task_id: str,
+        task_id: int,
         db: Session = Depends(get_db),
         token: str = Depends(verify_token)
 ):
     """Get the current status of an evaluation task."""
     task = db.query(models.EvaluationTask) \
-        .options(joinedload(models.EvaluationTask.metrics)) \
+        .options(
+            joinedload(models.EvaluationTask.metrics),
+            joinedload(models.EvaluationTask.adapter),
+        ) \
         .filter(models.EvaluationTask.id == task_id) \
         .first()
 
@@ -74,14 +88,19 @@ async def get_evaluation_status(
     return schemas.EvaluationTaskResponse(
         id=task.id,
         adapter_id=task.adapter_id,
+        base_model_to_use=task.base_model_to_use,
+        evaluation_type=task.evaluation_type,
+        task_category=task.task_category,
         name=task.name,
         description=task.description,
+        prompt_template=task.prompt_template,
         status=status_value,
         result=task.result,
         error_message=task.error_message,
         created_at=task.created_at,
         metrics=task.metrics,
-        judge_ids=task.judge_ids
+        adapter=task.adapter,
+        judge_ids=task.judge_ids or []
     )
 
 
@@ -125,18 +144,18 @@ def cancel_evaluation(
 
 @router.delete("/{task_id}")
 async def delete_evaluation_task(
-        task_id: str,
-        db: Session = Depends(get_db)
+        task_id: int,
+        db: Session = Depends(get_db),
+        token: str = Depends(verify_token)
 ):
     """
-        Deletes an evaluation task from the database.
-        If the task is currently running, it will gracefully cancel the background process first.
-        """
+    Deletes an evaluation task from the database.
+    If the task is currently running, it will gracefully cancel the background process first.
+    """
     try:
         return delete_task_record(db=db, task_id=task_id)
     except TaskNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

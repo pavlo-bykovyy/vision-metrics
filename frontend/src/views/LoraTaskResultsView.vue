@@ -19,6 +19,16 @@
       </div>
     </div>
 
+    <!-- Error Banner -->
+    <div v-if="detailsError || resultsError" class="bg-red-50 border border-red-100 text-red-600 text-sm font-medium rounded-2xl px-6 py-4">
+      {{ detailsError || resultsError }}
+    </div>
+
+    <!-- Details Loading Skeleton -->
+    <div v-if="isLoadingDetails && !taskDetails" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div v-for="n in 3" :key="n" class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 animate-pulse h-32"></div>
+    </div>
+
     <!-- Multi-Criteria Metrics Dashboard -->
     <div v-if="taskDetails?.metrics" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
 
@@ -66,7 +76,7 @@
           </div>
           <div class="flex justify-between items-center">
             <span class="text-sm font-medium text-slate-500">Total Samples</span>
-            <span class="font-bold text-slate-800 font-mono">{{ taskDetails.metrics.total_samples || 'N/A' }}</span>
+            <span class="font-bold text-slate-800 font-mono">{{ taskDetails.metrics.total_samples ?? 'N/A' }}</span>
           </div>
         </div>
       </div>
@@ -150,7 +160,7 @@
       </div>
     </div>
 
-    <!-- NEW: Raw JSON Data Box -->
+    <!-- Raw JSON Data Box -->
     <div v-if="taskDetails" class="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden mt-8">
       <div class="px-10 py-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
         <div>
@@ -171,23 +181,20 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import axios from 'axios'
+import { useLoraEvaluationTask } from '@/composables/useLoraEvaluationTask'
 
 const route = useRoute()
-const taskId = route.params.id
-const API_URL = import.meta.env.VITE_API_URL || ''
+const taskId = computed(() => route.params.id)
 
-const results = ref([])
-const isLoading = ref(true)
-const currentPage = ref(1)
-const totalPages = ref(1)
-const totalItems = ref(0)
+const {
+  taskDetails, isLoadingDetails, detailsError,
+  results, isLoadingResults: isLoading, resultsError,
+  currentPage, totalPages, totalItems,
+  fetchResults, loadAll
+} = useLoraEvaluationTask(taskId)
 
-const taskDetails = ref(null)
-
-// --- Helper Functions for Formatting ---
 const formatPercent = (val) => {
   if (val === null || val === undefined) return 'N/A'
   return (val * 100).toFixed(2) + '%'
@@ -198,7 +205,6 @@ const formatNumber = (val, decimals = 2) => {
   return val.toFixed(decimals)
 }
 
-// --- NEW: Copy to Clipboard Function ---
 const copyToClipboard = async (text) => {
   try {
     await navigator.clipboard.writeText(text)
@@ -209,42 +215,5 @@ const copyToClipboard = async (text) => {
   }
 }
 
-// --- API Calls ---
-const fetchTaskDetails = async () => {
-  try {
-    const token = localStorage.getItem('token')
-    const response = await axios.get(`${API_URL}/llm/lora/evaluations/${taskId}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-    taskDetails.value = response.data
-  } catch (error) {
-    console.error("Failed to fetch task details:", error)
-  }
-}
-
-const fetchResults = async (page = 1) => {
-  isLoading.value = true
-  try {
-    const token = localStorage.getItem('token')
-
-    const response = await axios.get(`${API_URL}/llm/lora/evaluations/${taskId}/results`, {
-      params: { page, size: 50 },
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-
-    results.value = response.data.items
-    currentPage.value = response.data.page
-    totalPages.value = response.data.pages
-    totalItems.value = response.data.total
-  } catch (error) {
-    console.error("Failed to fetch evaluation results:", error)
-  } finally {
-    isLoading.value = false
-  }
-}
-
-onMounted(() => {
-  fetchTaskDetails()
-  fetchResults()
-})
+onMounted(loadAll)
 </script>

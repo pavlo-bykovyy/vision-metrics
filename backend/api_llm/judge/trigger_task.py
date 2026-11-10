@@ -6,29 +6,40 @@ It handles dispatching tasks to Celery and managing failure states.
 from shared.utils.logger import get_logger
 
 from api_llm.services.celery_app import celery_app
+from api_llm.queues import (
+    JUDGE_EVALUATION_TASK,
+    JUDGE_EVALUATION_QUEUE,
+    ATTACK_JUDGE_TASK,
+    ATTACK_JUDGE_QUEUE,
+)
 
 
 logger = get_logger(__name__)
 
 
-def trigger_judge_task(judge_task_run_id: int) -> str:
+def trigger_judge_task(judge_task_run_id: int, is_attack: bool = False) -> str:
     """
     Dispatches the judge evaluation task to the Celery queue for background processing.
 
     Args:
         judge_task_run_id (int): The database ID of the judge task run.
+        is_attack (bool): Whether the parent evaluation task is an attack task.
 
     Returns:
         str: The unique Celery task ID generated for this job.
     """
+    task_name = ATTACK_JUDGE_TASK if is_attack else JUDGE_EVALUATION_TASK
+    queue_name = ATTACK_JUDGE_QUEUE if is_attack else JUDGE_EVALUATION_QUEUE
     try:
         async_result = celery_app.send_task(
-            name="llm.judge.evaluation",
-            queue="judge_tasks",
+            name=task_name,
+            queue=queue_name,
             kwargs={"judge_task_run_id": judge_task_run_id}
         )
 
-        logger.info(f"Successfully dispatched judge_task_run_id={judge_task_run_id} to Celery queue. Task ID: {async_result.id}")
+        logger.info(
+            f"Successfully dispatched judge_task_run_id={judge_task_run_id} to Celery queue '{queue_name}'. Task ID: {async_result.id}"
+        )
 
         return async_result.id
 

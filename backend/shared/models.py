@@ -24,6 +24,7 @@ from shared.enums import (
     ActiveModelStatus,
     JudgeStatus,
     EvaluationType,
+    TaskCategory,
     DatasetType,
     DatasetSource
 )
@@ -352,6 +353,12 @@ class EvaluationTask(Base):
     celery_task_id = Column(String, nullable=True)
 
     evaluation_type = Column(SQLEnum(EvaluationType, name="evaluation_type_enum"), default=EvaluationType.NONE)
+    task_category = Column(
+        SQLEnum(TaskCategory, name="task_category_enum"),
+        default=TaskCategory.NONE,
+        nullable=False,
+        index=True,
+    )
 
     adapter_id = Column(Integer, ForeignKey("lora_adapters.id"), nullable=True, index=True)
     dataset_id = Column(Integer, ForeignKey("datasets.id"), nullable=True, index=True)
@@ -367,7 +374,7 @@ class EvaluationTask(Base):
 
     load_params = Column(JSON, default={
         "torch_dtype": "float16",
-        "quantization": "none",
+        "quantization": "4bit",
         "device_map": "auto",
         "trust_remote_code": True,
         "use_fast_tokenizer": False
@@ -399,6 +406,16 @@ class EvaluationTask(Base):
 
     metrics = relationship("LoraEvaluationMetric", back_populates="task", uselist=False, cascade="all, delete-orphan")
     judge_runs = relationship("JudgeTaskRun", back_populates="evaluation_task", cascade="all, delete-orphan")
+    attack_visualization_runs = relationship(
+        "AttackVisualizationRun",
+        secondary="attack_visualization_run_tasks",
+        back_populates="evaluation_tasks",
+    )
+    attack_charts = relationship(
+        "AttackChart",
+        secondary="attack_chart_tasks",
+        back_populates="evaluation_tasks",
+    )
 
 
 class EvaluationResult(Base):
@@ -493,6 +510,11 @@ class JudgeTaskRun(Base):
     judge = relationship("Judge", back_populates="judge_runs")
 
     evaluations = relationship("JudgeEvaluation", back_populates="judge_task_run", cascade="all, delete-orphan")
+    attack_charts = relationship(
+        "AttackChart",
+        secondary="attack_chart_judge_runs",
+        back_populates="judge_task_runs",
+    )
 
 
 class Judge(Base):
@@ -554,7 +576,7 @@ class ActiveModel(Base):
 
     load_params = Column(JSON, default={
         "torch_dtype": "float16",
-        "quantization": "none",
+        "quantization": "4bit",
         "device_map": "auto",
         "trust_remote_code": True,
         "use_fast_tokenizer": False
@@ -614,3 +636,222 @@ class ChatResponseRecord(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     request = relationship("ChatRequestRecord", back_populates="response")
+
+
+# ---------------------------------------------------------
+# Dynamic Attack & Scenario Templates (replaces hardcoded notebook dicts)
+# ---------------------------------------------------------
+
+class AttackTaskConfig(Base):
+    """
+    Stores dynamic task-level specifications and INFERENCE_PROMPTS (SYSTEM/USER templates,
+    task_instruction, baseline ground truths, prefixes, and default sample entities)
+    for tasks like 'heroes', 'disinfo', or custom user tasks.
+    """
+    __tablename__ = "attack_task_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_name = Column(String(80), unique=True, index=True, nullable=False)
+    expected_output_format = Column(String(50), default="free_text", nullable=False)
+    max_new_tokens = Column(Integer, default=180, nullable=False)
+
+    # Mapping of language (e.g. 'ENGLISH', 'UKRAINIAN', 'RUSSIAN') ->
+    # {
+    #   "task_instruction": "...",
+    #   "baseline_gt": "...",
+    #   "baseline_gt_real": "...",
+    #   "baseline_gt_fake": "...",
+    #   "title_prefix": "TITLE",
+    #   "body_prefix": "ARTICLE",
+    #   "system": "...",
+    #   "user": "..."
+    # }
+    languages_config = Column(JSON, default=dict, nullable=False)
+
+    # Optional default sample entities (e.g. hero names list or {"real": [...], "fake": [...]})
+    default_entities = Column(JSON, default=dict, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class AttackTemplate(Base):
+    """
+    Stores editable scenario and attack categories (e.g. 'baseline', 'baseline_real',
+    'baseline_fake', 'safety_attack', 'stereotyping', 'cultural_bias', 'toxicity',
+    'hallucination', 'extraction') per task, along with per-language prompt templates
+    and expert ground-truth expectations.
+    """
+    __tablename__ = "attack_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_name = Column(String(80), index=True, nullable=False, default="heroes")
+    key = Column(String(80), index=True, nullable=False)
+    metric_category = Column(String(80), index=True, nullable=False)
+    variant = Column(String(40), nullable=True)
+
+    goal = Column(Text, nullable=False, default="Evaluate model compliance and safety.")
+    check_canary = Column(Boolean, default=False, nullable=False)
+    is_enabled = Column(Boolean, default=True, nullable=False)
+
+    # Mapping of language -> attack/scenario instruction text (e.g. {"UKRAINIAN": "...", "ENGLISH": "..."})
+    text = Column(JSON, default=dict, nullable=False)
+
+    # Mapping of language -> expert_ground_truth (from gt_map in notebook)
+    ground_truth = Column(JSON, default=dict, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class AttackTechnique(Base):
+    """
+    Stores editable prompt-wrapping techniques (e.g. 'direct', 'ignore',
+    'persona', 'roleplay', 'base64') with per-language templates containing
+    '{t}' or '{b64_t}'.
+    """
+    __tablename__ = "attack_techniques"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(80), unique=True, index=True, nullable=False)
+    is_enabled = Column(Boolean, default=True, nullable=False)
+
+    # Mapping of language -> wrapper template (e.g. {"UKRAINIAN": "... {t}", "ENGLISH": "... {t}"})
+    templates = Column(JSON, default=dict, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+# ---------------------------------------------------------
+# Attack Visualization & Chart Persistence (M2M with Tasks & Judge Runs)
+# ---------------------------------------------------------
+
+attack_visualization_run_tasks = Table(
+    "attack_visualization_run_tasks",
+    Base.metadata,
+    Column(
+        "visualization_run_id",
+        Integer,
+        ForeignKey("attack_visualization_runs.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "evaluation_task_id",
+        Integer,
+        ForeignKey("evaluation_tasks.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
+attack_chart_tasks = Table(
+    "attack_chart_tasks",
+    Base.metadata,
+    Column(
+        "chart_id",
+        Integer,
+        ForeignKey("attack_charts.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "evaluation_task_id",
+        Integer,
+        ForeignKey("evaluation_tasks.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
+attack_chart_judge_runs = Table(
+    "attack_chart_judge_runs",
+    Base.metadata,
+    Column(
+        "chart_id",
+        Integer,
+        ForeignKey("attack_charts.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "judge_task_run_id",
+        Integer,
+        ForeignKey("judge_task_runs.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
+
+class AttackVisualizationRun(Base):
+    """
+    Stores a multi-run or single-run Attack Visualization & Statistical Analysis report
+    (Coverage, Disinfo Classification, Heatmaps, Trade-offs, Language Gap, Radar,
+    Vulnerability Ranking, Cross-Case Comparison, Alignment Robustness Index (ARI),
+    Factorial ANOVA, and SRD/DnE/DnM/WSM/TOPSIS MCDM Ranking).
+    Linked many-to-many with `EvaluationTask` via `attack_visualization_run_tasks`.
+    """
+    __tablename__ = "attack_visualization_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    exclude_russian = Column(Boolean, default=True, nullable=False)
+
+    # Full statistical & analytical summary tables (ARI, ANOVA, MCDM, coverage, interpretation)
+    summary_payload = Column(JSON, default=dict, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    evaluation_tasks = relationship(
+        "EvaluationTask",
+        secondary=attack_visualization_run_tasks,
+        back_populates="attack_visualization_runs",
+    )
+    charts = relationship(
+        "AttackChart",
+        back_populates="visualization_run",
+        cascade="all, delete-orphan",
+    )
+
+
+class AttackChart(Base):
+    """
+    Stores an individual generated chart / figure for Attack & Judge Evaluation results,
+    with M2M links to the contributing `EvaluationTask`s and `JudgeTaskRun`s.
+    """
+    __tablename__ = "attack_charts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    visualization_run_id = Column(
+        Integer,
+        ForeignKey("attack_visualization_runs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
+    chart_type = Column(String(80), index=True, nullable=False)
+    task_scope = Column(String(80), index=True, nullable=True, default="all")
+    title = Column(String(255), nullable=False)
+    subtitle = Column(Text, nullable=True)
+
+    # Structured series/matrix/axis payload for interactive rendering
+    chart_data = Column(JSON, default=dict, nullable=False)
+
+    # Publication-ready vector SVG representation of the chart
+    svg_content = Column(Text, nullable=True)
+
+    artifact_id = Column(Integer, ForeignKey("artifacts.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    visualization_run = relationship("AttackVisualizationRun", back_populates="charts")
+    evaluation_tasks = relationship(
+        "EvaluationTask",
+        secondary=attack_chart_tasks,
+        back_populates="attack_charts",
+    )
+    judge_task_runs = relationship(
+        "JudgeTaskRun",
+        secondary=attack_chart_judge_runs,
+        back_populates="attack_charts",
+    )
+    artifact = relationship("Artifact")
+
+
+

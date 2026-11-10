@@ -154,7 +154,64 @@ const messages = {
             startTestBtn: 'Start New Test',
             allEvaluations: 'All Evaluations',
             confirmDelete: 'Are you sure you want to delete this evaluation?'
-        }
+        },
+        attacks: {
+            title: 'Model Attacks',
+            subtitle: 'Generate attack datasets, run them on an adapter, and view the Attack Success Rate (ASR).',
+            refresh: 'Refresh',
+            createAttack: 'Create Attack',
+            runsTitle: 'Attack Runs',
+            total: 'Total',
+            table: {
+                id: 'ID',
+                taskName: 'Name / Task',
+                status: 'Status',
+                date: 'Date',
+                actions: 'Actions',
+                defaultTaskName: 'Attack Task #{id}',
+                loading: 'Loading attack runs...',
+                noTasks: 'No attacks created yet. Click "+ Create Attack" to get started.',
+                results: 'Results',
+                completed: 'Completed',
+            },
+            dynamic: {
+                title: 'Launch Dynamic Attack',
+                subtitle: 'Configure mutation settings, target adapter, and judges on a single interactive panel.',
+                back: 'Back to attacks',
+                sections: {
+                    target: 'Target Model (Adapter)',
+                    source: 'Base Prompt Source',
+                    techniques: 'Attack Techniques',
+                    judges: 'Automated Judges',
+                    advanced: 'Advanced Generation Parameters (JSON)'
+                },
+                mode: {
+                    dataset: 'From existing dataset',
+                    custom: 'Single test prompt'
+                },
+                placeholders: {
+                    selectAdapter: 'Select adapter for testing...',
+                    selectDataset: 'Select base dataset...',
+                    customPrompt: 'Enter test instruction or prompt to attack...',
+                    advancedJson: '{\n  "temperature": 0.7,\n  "max_tokens": 512\n}'
+                },
+                labels: {
+                    rowsCount: 'rows',
+                    totalMutations: 'Estimated mutated prompts:',
+                    promptsCount: '{count} prompts',
+                    selectedJudges: 'Selected judges: {count}'
+                },
+                buttons: {
+                    submit: 'Launch Dynamic Attack',
+                    launching: 'Generating & queuing task in Celery...'
+                },
+                errors: {
+                    invalidJson: 'Invalid JSON format in generation parameters.',
+                    fetchFailed: 'Failed to load backend resources.',
+                    submitFailed: 'Failed to launch the attack.'
+                }
+            }
+        },
     },
     uk: {
         common: {
@@ -307,6 +364,63 @@ const messages = {
             startTestBtn: 'Почати новий тест',
             allEvaluations: 'Всі оцінювання',
             confirmDelete: 'Ви впевнені, що хочете видалити це оцінювання?'
+        },
+        attacks: {
+            title: 'Атаки на модель',
+            subtitle: 'Згенеруйте набір атак, запустіть його на адаптері й перегляньте рівень успішності (ASR).',
+            refresh: 'Оновити',
+            createAttack: 'Створити атаку',
+            runsTitle: 'Запуски атак',
+            total: 'Всього',
+            table: {
+                id: 'ID',
+                taskName: 'Назва / Задача',
+                status: 'Статус',
+                date: 'Дата',
+                actions: 'Дії',
+                defaultTaskName: 'Задача атаки #{id}',
+                loading: 'Завантаження запусків...',
+                noTasks: 'Атак ще не створено. Натисніть "+ Створити атаку", щоб розпочати.',
+                results: 'Результати',
+                completed: 'Завершено',
+            },
+            dynamic: {
+                title: 'Запуск динамічної атаки',
+                subtitle: 'Налаштуйте конфігурацію мутацій, оберіть цільову модель та суддів на єдиній панелі.',
+                back: 'До списку атак',
+                sections: {
+                    target: 'Цільова модель (Адаптер)',
+                    source: 'Джерело базових промптів',
+                    techniques: 'Техніки атак',
+                    judges: 'Автоматичні судді (Judges)',
+                    advanced: 'Додаткові параметри генерації (JSON)'
+                },
+                mode: {
+                    dataset: 'З існуючого датасету',
+                    custom: 'Один тестовий промпт'
+                },
+                placeholders: {
+                    selectAdapter: 'Оберіть адаптер для тестування...',
+                    selectDataset: 'Оберіть базовий датасет...',
+                    customPrompt: 'Введіть тестову інструкцію чи питання для атаки...',
+                    advancedJson: '{\n  "temperature": 0.7,\n  "max_tokens": 512\n}'
+                },
+                labels: {
+                    rowsCount: 'рядків',
+                    totalMutations: 'Прогнозована кількість мутованих промптів:',
+                    promptsCount: 'Згенеровано {count} промптів',
+                    selectedJudges: 'Обрано суддів: {count}'
+                },
+                buttons: {
+                    submit: 'Запустити динамічну атаку',
+                    launching: 'Генерація та запуск у Celery...'
+                },
+                errors: {
+                    invalidJson: 'Помилка у форматі JSON параметрів генерації.',
+                    fetchFailed: 'Помилка завантаження ресурсів з бекенду.',
+                    submitFailed: 'Не вдалося запустити атаку.'
+                }
+            }
         },
     }
 }

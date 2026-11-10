@@ -1,10 +1,13 @@
-from typing import Optional, Any
+from typing import Optional, Any, Literal
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 from fastapi import Form
 import json
 
 from shared import enums
+
+TaskKind = Literal["evaluation", "attack", "judge"]
+TaskState = Literal["pending", "running", "completed", "failed", "cancelled"]
 
 
 class ModelBasic(BaseModel):
@@ -263,12 +266,28 @@ class LoraEvaluationMetricResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class JudgeEvaluationSummary(BaseModel):
+    id: int
+    judge_model_id: Optional[int] = None
+    judge_task_run_id: Optional[int] = None
+    safety_score: Optional[float] = None
+    accuracy_score: Optional[float] = None
+    hallucination_score: Optional[float] = None
+    metric_category: Optional[str] = None
+    reasoning: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class EvaluationTaskResponse(BaseModel):
     """
     Schema for a single LoRA evaluation task response.
     """
     id: int
     adapter_id: Optional[int] = None
+    base_model_to_use: Optional[str] = None
+    evaluation_type: Optional[enums.EvaluationType] = None
+    task_category: Optional[enums.TaskCategory] = enums.TaskCategory.STANDARD
     name: Optional[str] = None
     description: Optional[str] = None
     prompt_template: Optional[str] = None
@@ -304,6 +323,8 @@ class EvaluationResultResponse(BaseModel):
     latency_seconds: Optional[float] = None
     peak_memory_mb: Optional[float] = None
     avg_logprob: Optional[float] = None
+    metadata: Optional[dict[str, Any]] = Field(default=None, validation_alias="metadata_")
+    judge_evaluations: list[JudgeEvaluationSummary] = Field(default_factory=list)
 
     created_at: Optional[datetime] = None
 
@@ -450,3 +471,56 @@ class JudgeTaskRunPaginationResponse(BaseModel):
     size: int
     pages: int
 
+
+class JudgeRunResultItem(BaseModel):
+    """
+    A single judge verdict joined with the generated text it evaluated.
+    """
+    id: int
+    result_id: Optional[int] = None
+    input_text: Optional[str] = None
+    generated_text: Optional[str] = None
+    safety_score: Optional[float] = None
+    accuracy_score: Optional[float] = None
+    hallucination_score: Optional[float] = None
+    metric_category: Optional[str] = None
+    reasoning: Optional[str] = None
+
+
+class JudgeRunResultsPaginationResponse(BaseModel):
+    items: list[JudgeRunResultItem]
+    total: int
+    page: int
+    size: int
+    pages: int
+
+
+class TaskListItem(BaseModel):
+    """
+    Flat, model-agnostic representation of a single row in a tasks table.
+
+    The ``status`` values must match the keys defined in the frontend
+    ``evaluationStatuses.js`` constants.
+    """
+    id: int
+    kind: TaskKind
+    name: str
+    description: Optional[str] = None
+    status: TaskState
+    result: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskListResponse(BaseModel):
+    """
+    Universal response for any endpoint that lists tasks.
+
+    Attributes:
+        items: Task rows, already converted to the universal shape.
+        total: Total number of matching tasks, regardless of the page size.
+    """
+    items: list[TaskListItem]
+    total: int

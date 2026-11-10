@@ -51,9 +51,31 @@
           <input
               v-model="baseModelId"
               type="text"
-              placeholder="e.g., gpt2, meta-llama/Llama-2-7b-hf"
+              placeholder="e.g., Qwen/Qwen2.5-3B-Instruct, gpt2"
               class="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-700"
           />
+
+          <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2 mt-1">
+            <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+              ⚡ Quick Select Base Model:
+            </span>
+            <div class="flex flex-wrap gap-2">
+              <button
+                  v-for="bm in DEFAULT_BASE_MODEL_PRESETS"
+                  :key="bm"
+                  type="button"
+                  @click="baseModelId = bm"
+                  :class="[
+                    'px-3 py-1.5 rounded-xl text-xs font-bold border transition-all',
+                    baseModelId === bm
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100',
+                  ]"
+              >
+                {{ bm }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <EvaluationJudgeSelector
@@ -127,6 +149,14 @@ const selectedJudgeIds = ref([])
 
 const useCustomTemplate = ref(false)
 const promptTemplate = ref('{input_text}')
+
+const DEFAULT_BASE_MODEL_PRESETS = [
+  'Qwen/Qwen2.5-3B-Instruct',
+  'Qwen/Qwen2.5-7B-Instruct',
+  'HuggingFaceTB/SmolLM2-1.7B-Instruct',
+  'TinyLlama/TinyLlama-1.1B-Chat-v1.0',
+  'mistralai/Mistral-7B-Instruct-v0.3',
+]
 
 const defaultParams = {
   max_new_tokens: 128,

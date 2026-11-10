@@ -3,6 +3,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from shared import models
 from shared.utils.logger import get_logger
 from shared.config import MODEL_CACHE_DIR
+from api_llm.lora.model_loader import build_model_load_kwargs
 
 
 logger = get_logger(__name__)
@@ -34,18 +35,21 @@ def load_judge_base_model(model_name: str, load_params: dict = None) -> tuple:
         load_params = {}
 
     logger.info(f"Loading tokenizer for judge model: {model_name}")
-    tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=MODEL_CACHE_DIR)
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name,
+        cache_dir=MODEL_CACHE_DIR,
+        trust_remote_code=bool(load_params.get("trust_remote_code", True)),
+    )
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
 
     logger.info(f"Loading judge base model: {model_name}")
-
+    model_kwargs = build_model_load_kwargs(load_params=load_params, cache_dir=MODEL_CACHE_DIR)
     base_model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        cache_dir=MODEL_CACHE_DIR,
-        device_map=load_params.get("device_map", "auto")
+        **model_kwargs,
     )
     base_model.eval()
 

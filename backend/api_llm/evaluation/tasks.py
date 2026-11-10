@@ -32,7 +32,7 @@ def _handle_task_error(db: Session, task_id: str, error: Exception) -> None:
 
     db.query(models.EvaluationTask).filter(models.EvaluationTask.id == task_id).update({
         "status": enums.TaskStatus.FAILED,
-        "error": str(error)
+        "error_message": str(error)[:255]
     })
     db.commit()
 
@@ -73,14 +73,10 @@ def run_evaluation_task(task_id: str) -> None:
         db.commit()
 
         download_dataset_if_needed(db, task)
+        prompts_to_process = prepare_prompts(task, db)
 
         logger.info(f"[Task {task_id}] Delegating model loading to Factory...")
         tokenizer, base_model, model, temp_extract_dir = load_evaluation_model(task, db)
-
-        task.status = enums.TaskStatus.PENDING
-        db.commit()
-
-        prompts_to_process = prepare_prompts(task, db)
 
         task.status = enums.TaskStatus.EVALUATING
         db.commit()
@@ -106,6 +102,9 @@ def run_evaluation_task(task_id: str) -> None:
         _cleanup_disk_resources(task_id, temp_extract_dir)
 
         cleanup_ml_resources(model, base_model, tokenizer)
+        model = None
+        base_model = None
+        tokenizer = None
 
         clear_cuda_cache()
 

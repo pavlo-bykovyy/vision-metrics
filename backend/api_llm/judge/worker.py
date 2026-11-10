@@ -4,11 +4,14 @@ from shared.database import engine
 from shared.utils.logger import get_logger
 from api_llm.services.celery_app import celery_app
 from api_llm.judge.utils.error_handler import update_judge_run_to_failed
+from api_llm.queues import JUDGE_EVALUATION_QUEUE
 
 logger = get_logger(__name__)
 
 
-@celery_app.task(bind=True, name="llm.judge.evaluation", queue="judge_tasks")
+@celery_app.task(bind=True,
+                 name="llm.judge.evaluation",
+                 queue=JUDGE_EVALUATION_QUEUE)
 def worker_judge_evaluate(self, judge_task_run_id: int):
     """
     Background worker function to process a specific LLM-as-a-Judge run.
@@ -32,3 +35,6 @@ def worker_judge_evaluate(self, judge_task_run_id: int):
     except Exception as e:
         logger.warning(f"Judge Worker failed to start or load module for run {judge_task_run_id}: {e}")
         update_judge_run_to_failed(judge_task_run_id, str(e))
+    finally:
+        from api_llm.utils.memory import clear_cuda_cache
+        clear_cuda_cache()

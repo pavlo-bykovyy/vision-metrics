@@ -10,6 +10,7 @@ from shared import models
 from shared.config import MODEL_CACHE_DIR, UPLOAD_DIR
 from shared.utils.logger import get_logger
 from api_llm.lora.utils import extract_adapter_zip_for_task
+from api_llm.utils.memory import clear_cuda_cache
 
 
 logger = get_logger(__name__)
@@ -80,21 +81,6 @@ def _sanitize_adapter_config(adapter_dir: str):
 def _build_quantization_config(quantization: str, model_dtype: torch.dtype) -> Optional[BitsAndBytesConfig]:
     """
     Constructs a BitsAndBytes configuration object for model quantization.
-
-    Depending on the requested quantization level ('4bit' or '8bit'), this helper
-    initializes the appropriate settings to load the model efficiently into VRAM.
-    For 4-bit quantization, it uses NormalFloat4 (NF4) and double quantization
-    for optimal memory saving and performance.
-
-    Args:
-        quantization (str): The desired quantization level. Expected values are
-            '4bit', '8bit', or 'none'.
-        model_dtype (torch.dtype): The PyTorch data type to use for computations
-            when applying 4-bit quantization (e.g., torch.float16).
-
-    Returns:
-        Optional[BitsAndBytesConfig]: The configured BitsAndBytes object if
-        quantization is requested, or None if no valid quantization is specified.
     """
     if quantization == "4bit":
         return BitsAndBytesConfig(
@@ -106,6 +92,50 @@ def _build_quantization_config(quantization: str, model_dtype: torch.dtype) -> O
     elif quantization == "8bit":
         return BitsAndBytesConfig(load_in_8bit=True)
     return None
+
+
+def build_model_load_kwargs(
+    load_params: dict | None = None,
+    cache_dir: str = MODEL_CACHE_DIR,
+) -> dict:
+    """
+    Builds standardized HuggingFace `AutoModelForCausalLM.from_pretrained` kwargs
+    with dtype resolution, 4-bit/8-bit BitsAndBytes quantization, and VRAM safety fallback.
+    """
+    clear_cuda_cache()
+    params = load_params or {}
+
+    dtype_mapping = {
+        "float16": torch.float16,
+        "bfloat16": torch.bfloat16,
+        "float32": torch.float32,
+    }
+    dtype_str = str(params.get("torch_dtype") or "float16").lower()
+    model_dtype = dtype_mapping.get(dtype_str, torch.float16)
+
+    quantization = str(params.get("quantization") or "4bit").lower()
+    if quantization == "none" and torch.cuda.is_available():
+        free_vram_gb = torch.cuda.mem_get_info()[0] / (1024 ** 3)
+        if free_vram_gb < 16.0:
+            logger.info(
+                f"Free GPU VRAM is {free_vram_gb:.1f} GB (<16 GB); auto-enabling 4bit quantization."
+            )
+            quantization = "4bit"
+
+    quantization_config = _build_quantization_config(quantization, model_dtype)
+
+    model_kwargs = {
+        "device_map": params.get("device_map") or "auto",
+        "cache_dir": cache_dir,
+        "trust_remote_code": bool(params.get("trust_remote_code", True)),
+        "low_cpu_mem_usage": True,
+    }
+    if quantization_config is not None:
+        model_kwargs["quantization_config"] = quantization_config
+    else:
+        model_kwargs["torch_dtype"] = model_dtype
+
+    return model_kwargs
 
 
 def load_models_from_task(
@@ -195,25 +225,8 @@ def load_models(
     if load_params is None:
         load_params = {}
 
-    def safe_get(key: str, default_val):
-        val = load_params.get(key)
-        return val if val is not None else default_val
-
-    dtype_mapping = {
-        "float16": torch.float16,
-        "bfloat16": torch.bfloat16,
-        "float32": torch.float32
-    }
-
-    dtype_str = safe_get("torch_dtype", "float16")
-    model_dtype = dtype_mapping.get(str(dtype_str).lower(), torch.float16)
-
-    quantization = str(safe_get("quantization", "none")).lower()
-    trust_remote_code = bool(safe_get("trust_remote_code", True))
-    use_fast_tokenizer = bool(safe_get("use_fast_tokenizer", False))
-    device_map = safe_get("device_map", "auto")
-
-    quantization_config = _build_quantization_config(quantization, model_dtype)
+    trust_remote_code = bool(load_params.get("trust_remote_code", True))
+    use_fast_tokenizer = bool(load_params.get("use_fast_tokenizer", False))
 
     logger.info(f"[1/3] Loading tokenizer for base model: {base_model_name}")
     tokenizer = AutoTokenizer.from_pretrained(
@@ -226,20 +239,9 @@ def load_models(
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    logger.info(
-        f"[2/3] Loading base model '{base_model_name}' (Quantization: {quantization})"
-    )
+    model_kwargs = build_model_load_kwargs(load_params=load_params, cache_dir=cache_dir)
 
-    model_kwargs = {
-        "device_map": device_map,
-        "cache_dir": cache_dir,
-        "trust_remote_code": trust_remote_code,
-    }
-
-    if quantization_config is not None:
-        model_kwargs["quantization_config"] = quantization_config
-    else:
-        model_kwargs["torch_dtype"] = model_dtype
+    logger.info(f"[2/3] Loading base model '{base_model_name}'")
 
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_name, **model_kwargs

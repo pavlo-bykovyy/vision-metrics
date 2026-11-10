@@ -100,4 +100,7 @@ def run_judge_evaluation_task(judge_task_run_id: int) -> None:
 
         finally:
             cleanup_ml_resources(model, base_model, tokenizer)
+            model = None
+            base_model = None
+            tokenizer = None
             clear_cuda_cache()

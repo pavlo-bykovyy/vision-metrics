@@ -94,12 +94,15 @@ def _create_evaluation_result(
 
     avg_logprob_val = _calculate_avg_logprob(context.seq_scores)
 
-    metadata_dict = _build_metadata(
-        context.is_encoder_decoder,
-        generated_tokens_count,
-        raw_prompt_text,
-        item.get("inputs", {})
-    )
+    metadata_dict = {
+        **(item.get("metadata") or {}),
+        **_build_metadata(
+            context.is_encoder_decoder,
+            generated_tokens_count,
+            raw_prompt_text,
+            item.get("inputs", {})
+        ),
+    }
 
     return models.EvaluationResult(
         task_id=task_id,

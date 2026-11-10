@@ -28,7 +28,7 @@
       <TasksTable
           :tasks="tasks"
           :is-loading="isLoading"
-          :resolve-route="(id) => ({ name: 'JudgeTaskResults', params: { id: id } })"
+          :resolve-route="(id) => `/judge-tasks/${id}/results`"
           @delete="handleDelete"
           @cancel="handleCancel"
       />
@@ -37,84 +37,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import axios from 'axios'
 import TasksTable from '@/components/TasksTable.vue'
+import { useTaskList } from '@/composables/useTaskList'
 
-const API_URL = import.meta.env.VITE_API_URL || ''
-const tasks = ref([])
-const isLoading = ref(false)
-let pollingInterval = null
-
-const getHeaders = () => {
-  const token = localStorage.getItem('token')
-  return token ? { 'Authorization': `Bearer ${token}` } : {}
-}
-
-const fetchTasks = async () => {
-  isLoading.value = true
-  try {
-    const response = await axios.get(`${API_URL}/llm/judge-runs/`, {
-      headers: getHeaders()
-    })
-
-    tasks.value = response.data.items || response.data.tasks || response.data || []
-  } catch (error) {
-    console.error('Error fetching judge tasks:', error)
-  } finally {
-    isLoading.value = false
-  }
-}
-
-const handleDelete = async (id) => {
-  if (confirm(`Are you sure you want to delete judge task #${id}?`)) {
-    try {
-      await axios.delete(`${API_URL}/llm/judge-runs/${id}`, {
-        headers: getHeaders()
-      })
-      await fetchTasks()
-    } catch (error) {
-      alert(error.response?.data?.detail || 'Failed to delete task. It might still be running.')
-      console.error(error)
-    }
-  }
-}
-
-const handleCancel = async (id) => {
-  if (confirm(`Are you sure you want to cancel judge task #${id}?`)) {
-    try {
-      await axios.post(`${API_URL}/llm/judge-runs/${id}/cancel`, {}, {
-        headers: getHeaders()
-      })
-      await fetchTasks()
-    } catch (error) {
-      alert(error.response?.data?.detail || 'Failed to cancel task.')
-      console.error(error)
-    }
-  }
-}
-
-const startPolling = () => {
-  if (!pollingInterval) {
-    pollingInterval = setInterval(() => {
-      fetchTasks()
-    }, 5000)
-  }
-}
-
-const stopPolling = () => {
-  if (pollingInterval) {
-    clearInterval(pollingInterval)
-    pollingInterval = null
-  }
-}
-
-onMounted(() => {
-  fetchTasks()
-  startPolling()
-})
-
-onUnmounted(() => {
-  stopPolling()
-})
+const { tasks, isLoading, fetchTasks, handleDelete, handleCancel } =
+    useTaskList('/llm/judge-runs', { label: 'judge task' })
 </script>

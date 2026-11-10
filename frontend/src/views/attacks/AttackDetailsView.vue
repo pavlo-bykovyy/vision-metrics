@@ -1,0 +1,314 @@
+<template>
+  <div class="space-y-8 pb-12 mt-8">
+
+    <!-- Header Section -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <button @click="router.push('/attacks')" class="text-sm font-bold text-slate-500 hover:text-slate-800 flex items-center gap-2 mb-2">
+          <span>&larr;</span> Назад до списку атак
+        </button>
+
+        <h1 class="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3 flex-wrap">
+          {{ taskDetails?.name || `Attack Run #${taskId}` }}
+          <span v-if="taskDetails?.name" class="text-sm font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">#{{ taskId }}</span>
+          <span v-if="taskDetails?.status" class="text-xs font-black uppercase tracking-wider px-2.5 py-1 rounded-full"
+                :class="statusBadgeClass(taskDetails.status)">
+            {{ taskDetails.status }}
+          </span>
+          <span v-if="taskDetails?.base_model_to_use" class="text-xs font-mono font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg">
+            {{ taskDetails.base_model_to_use }}
+          </span>
+        </h1>
+
+        <p class="text-slate-500 font-medium mt-2 max-w-3xl">
+          {{ taskDetails?.description || 'Аналітичний звіт ASR (Attack Success Rate), метрики продуктивності та згенеровані відповіді для запуску атаки.' }}
+        </p>
+      </div>
+    </div>
+
+    <!-- Error Banner -->
+    <div v-if="detailsError || resultsError || taskDetails?.error_message" class="bg-red-50 border border-red-100 text-red-600 text-sm font-medium rounded-2xl px-6 py-4">
+      {{ detailsError || resultsError || taskDetails?.error_message }}
+    </div>
+
+    <!-- Details Loading Skeleton -->
+    <div v-if="isLoadingDetails && !taskDetails" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div v-for="n in 3" :key="n" class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 animate-pulse h-32"></div>
+    </div>
+
+    <!-- Multi-Criteria Metrics Dashboard -->
+    <div v-if="taskDetails?.metrics" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+
+      <!-- Predictive Quality Card -->
+      <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+        <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+          <span>🎯</span> Predictive Quality
+        </h3>
+        <div class="flex items-end gap-3">
+          <span class="text-4xl font-black text-blue-600">{{ formatPercent(taskDetails.metrics.schema_validity_rate) }}</span>
+        </div>
+        <p class="text-sm font-bold text-slate-500 mt-2">Schema Validity Rate</p>
+      </div>
+
+      <!-- Operational Efficiency Card -->
+      <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+        <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+          <span>⚡</span> Operational Efficiency
+        </h3>
+        <div class="space-y-3">
+          <div class="flex justify-between items-center border-b border-slate-50 pb-2">
+            <span class="text-sm font-medium text-slate-500">Throughput (TPS)</span>
+            <span class="font-bold text-slate-800 font-mono">{{ formatNumber(taskDetails.metrics.mean_tps) }} tok/s</span>
+          </div>
+          <div class="flex justify-between items-center border-b border-slate-50 pb-2">
+            <span class="text-sm font-medium text-slate-500">VRAM Footprint</span>
+            <span class="font-bold text-slate-800 font-mono">{{ formatNumber(taskDetails.metrics.mean_vram_mb, 0) }} MB</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-sm font-medium text-slate-500">Avg Latency</span>
+            <span class="font-bold text-slate-800 font-mono">{{ formatNumber(taskDetails.metrics.mean_latency_sec) }} s</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Calibration & Info Card -->
+      <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+        <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+          <span>⚖️</span> Calibration & Info
+        </h3>
+        <div class="space-y-3">
+          <div class="flex justify-between items-center border-b border-slate-50 pb-2">
+            <span class="text-sm font-medium text-slate-500">Mean Logprob</span>
+            <span class="font-bold text-slate-800 font-mono">{{ formatNumber(taskDetails.metrics.mean_logprob, 4) }}</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-sm font-medium text-slate-500">Total Samples</span>
+            <span class="font-bold text-slate-800 font-mono">{{ taskDetails.metrics.total_samples ?? 'N/A' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Attack ASR & Judge Summary Card -->
+    <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+      <AttackSummary
+          :api-url="API_URL"
+          :initial-task-id="Number(taskId)"
+      />
+    </div>
+
+    <!-- Link to the dedicated visualization page -->
+    <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex items-center justify-between gap-4 flex-wrap">
+      <div>
+        <h2 class="text-lg font-black text-slate-800 tracking-tight">Візуалізація результатів</h2>
+        <p class="text-xs text-slate-500 font-medium">
+          Графіки, ARI, ANOVA та MCDM-рейтинг за оцінками Judge — на окремій сторінці.
+        </p>
+      </div>
+      <button @click="router.push(`/attacks/${taskId}/visualizations`)"
+              class="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl shadow-md shadow-blue-600/20 hover:bg-blue-700 transition-all">
+        Відкрити візуалізацію →
+      </button>
+    </div>
+
+    <!-- Per-Prompt Results Table -->
+    <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/40 flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-black text-slate-800 tracking-tight">Згенеровані відповіді за промптами</h2>
+          <p class="text-xs text-slate-500 font-medium">Детальний перегляд вхідних запитів, відповідей моделі, метрик інференсу та оцінок Judge.</p>
+        </div>
+        <span v-if="totalItems" class="text-xs font-bold text-slate-500 bg-white border border-slate-200 px-3 py-1 rounded-full">
+          Всього записів: {{ totalItems }}
+        </span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+          <tr class="bg-slate-50 border-b border-slate-100">
+            <th class="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest w-[38%]">Question (Input Text)</th>
+            <th class="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest w-[40%]">Answer (Generated Text)</th>
+            <th class="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest w-[22%]">Metrics & Judge</th>
+          </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+          <tr v-if="isLoading">
+            <td colspan="3" class="px-6 py-8 text-center text-slate-400 font-medium animate-pulse">Loading results...</td>
+          </tr>
+          <tr v-else-if="results.length === 0">
+            <td colspan="3" class="px-6 py-8 text-center text-slate-400 font-medium">No results found for this task.</td>
+          </tr>
+          <tr v-for="result in results" :key="result.id" class="hover:bg-slate-50 transition-colors">
+            <td class="px-6 py-4 text-sm text-slate-700 whitespace-pre-wrap align-top bg-slate-50/30 border-r border-slate-100">
+              <div v-if="result.metadata && Object.keys(result.metadata).length" class="flex flex-wrap gap-1.5 mb-2">
+                <span v-if="result.metadata.language" class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                  {{ result.metadata.language }}
+                </span>
+                <span v-if="result.metadata.scenario_type" class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100">
+                  {{ result.metadata.scenario_type }}
+                </span>
+                <span v-if="result.metadata.attack_technique" class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100">
+                  {{ result.metadata.attack_technique }}
+                </span>
+                <span v-if="result.metadata.target_entity" class="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                  {{ result.metadata.target_entity }}
+                </span>
+              </div>
+              <div>{{ result.input_text }}</div>
+            </td>
+
+            <td class="px-6 py-4 text-sm text-slate-800 whitespace-pre-wrap align-top border-r border-slate-100">
+              <div>{{ result.generated_text }}</div>
+
+              <div v-if="result.judge_evaluations?.length" class="mt-3 space-y-2">
+                <div
+                    v-for="je in result.judge_evaluations"
+                    :key="je.id"
+                    class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-600"
+                >
+                  <div class="font-bold text-slate-700 mb-1">Judge Reasoning:</div>
+                  <div class="whitespace-pre-wrap">{{ je.reasoning || '—' }}</div>
+                </div>
+              </div>
+            </td>
+
+            <td class="px-6 py-4 text-xs text-slate-600 align-top">
+              <div class="space-y-1.5 bg-slate-50 rounded-lg p-3 border border-slate-100">
+                <template v-if="result.judge_evaluations?.length">
+                  <div class="pb-1.5 mb-1.5 border-b border-slate-200 space-y-1">
+                    <div class="flex justify-between items-center">
+                      <span class="font-semibold text-slate-500">Safety:</span>
+                      <span class="font-bold font-mono px-1.5 py-0.5 rounded"
+                            :class="(result.judge_evaluations[0].safety_score ?? 5) <= 2 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'">
+                        {{ result.judge_evaluations[0].safety_score ?? 'N/A' }} / 5
+                      </span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                      <span class="font-semibold text-slate-500">Accuracy:</span>
+                      <span class="font-bold font-mono text-indigo-700">
+                        {{ result.judge_evaluations[0].accuracy_score ?? 'N/A' }} / 5
+                      </span>
+                    </div>
+                  </div>
+                </template>
+
+                <div v-if="result.latency_seconds != null" class="flex justify-between">
+                  <span class="font-semibold text-slate-400">Latency:</span>
+                  <span class="font-medium font-mono">{{ result.latency_seconds.toFixed(2) }}s</span>
+                </div>
+                <div v-if="result.prompt_tokens != null && result.completion_tokens != null" class="flex justify-between">
+                  <span class="font-semibold text-slate-400">Tokens:</span>
+                  <span class="font-medium font-mono" title="Prompt / Completion">{{ result.prompt_tokens }} / {{ result.completion_tokens }}</span>
+                </div>
+                <div v-if="result.peak_memory_mb != null" class="flex justify-between">
+                  <span class="font-semibold text-slate-400">VRAM:</span>
+                  <span class="font-medium font-mono">{{ result.peak_memory_mb.toFixed(0) }} MB</span>
+                </div>
+                <div v-if="result.avg_logprob != null" class="flex justify-between">
+                  <span class="font-semibold text-slate-400">Logprob:</span>
+                  <span class="font-medium font-mono">{{ result.avg_logprob.toFixed(3) }}</span>
+                </div>
+                <div v-if="result.latency_seconds == null && result.prompt_tokens == null && !result.judge_evaluations?.length" class="text-slate-400 italic text-center">
+                  No metrics available
+                </div>
+              </div>
+            </td>
+          </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="totalPages > 1" class="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
+        <div class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+          Page {{ currentPage }} / {{ totalPages }} (Total: {{ totalItems }})
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+              @click="fetchResults(currentPage - 1)"
+              :disabled="currentPage === 1"
+              class="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+          </button>
+
+          <button
+              @click="fetchResults(currentPage + 1)"
+              :disabled="currentPage === totalPages"
+              class="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Raw JSON Data Box -->
+    <div v-if="taskDetails" class="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden mt-8">
+      <div class="px-10 py-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
+        <div>
+          <h2 class="text-xl font-black text-slate-800 tracking-tight">Raw Evaluation Data</h2>
+          <p class="text-sm text-slate-500 mt-1 font-medium">Full JSON response for this evaluation run.</p>
+        </div>
+        <button @click="copyToClipboard(JSON.stringify(taskDetails, null, 2))" class="flex items-center gap-2 px-4 py-2 text-sm font-bold text-slate-600 hover:text-blue-600 bg-white border border-slate-200 hover:border-blue-200 rounded-xl transition-colors shadow-sm" title="Copy JSON">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+          Copy JSON
+        </button>
+      </div>
+      <div class="p-6 bg-slate-50/50">
+        <pre class="text-xs font-mono text-slate-700 overflow-x-auto whitespace-pre-wrap p-4 bg-white rounded-2xl border border-slate-100 shadow-inner">{{ JSON.stringify(taskDetails, null, 4) }}</pre>
+      </div>
+    </div>
+
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import AttackSummary from '@/components/attacks/AttackSummary.vue'
+import { useLoraEvaluationTask } from '@/composables/useLoraEvaluationTask'
+
+const route = useRoute()
+const router = useRouter()
+const API_URL = import.meta.env.VITE_API_URL || '/api'
+const taskId = computed(() => route.params.id)
+
+const {
+  taskDetails, isLoadingDetails, detailsError,
+  results, isLoadingResults: isLoading, resultsError,
+  currentPage, totalPages, totalItems,
+  fetchResults, loadAll
+} = useLoraEvaluationTask(taskId)
+
+const formatPercent = (val) => {
+  if (val === null || val === undefined) return 'N/A'
+  return (val * 100).toFixed(2) + '%'
+}
+
+const formatNumber = (val, decimals = 2) => {
+  if (val === null || val === undefined) return 'N/A'
+  return val.toFixed(decimals)
+}
+
+const statusBadgeClass = (status) => {
+  const s = String(status || '').toLowerCase()
+  if (s === 'completed') return 'bg-emerald-100 text-emerald-700'
+  if (s === 'failed') return 'bg-red-100 text-red-700'
+  if (s === 'processing' || s === 'running' || s === 'pending') return 'bg-amber-100 text-amber-700'
+  return 'bg-slate-100 text-slate-600'
+}
+
+const copyToClipboard = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    alert('JSON copied to clipboard!')
+  } catch (err) {
+    console.error('Failed to copy text', err)
+    alert('Failed to copy text.')
+  }
+}
+
+onMounted(loadAll)
+</script>

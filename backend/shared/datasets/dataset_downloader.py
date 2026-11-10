@@ -1,5 +1,4 @@
 import os
-import requests
 import zipfile
 from urllib.parse import urlparse
 from sqlalchemy.orm import Session
@@ -59,6 +58,7 @@ def download_dataset_if_needed(db: Session, task: models.EvaluationTask) -> None
         )
 
     elif dataset.file_source == enums.DatasetSource.DIRECT_URL:
+        import requests
         file_name = os.path.basename(urlparse(dataset.source_url).path) or f"{dataset.id}_file.dat"
         raw_download_path = os.path.join(base_storage_dir, f"{dataset.id}_{file_name}")
 

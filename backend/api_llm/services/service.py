@@ -120,6 +120,7 @@ def create_evaluation_task(request: schemas.EvaluateRequest, db) -> dict:
         prompt=request.prompt,
         generation_params=request.generation_params,
         evaluation_type=enums.EvaluationType.LORA,
+        task_category=enums.TaskCategory.STANDARD,
         judge_runs=judge_run_objects
     )
     db.add(task)
@@ -185,6 +186,7 @@ def create_base_model_evaluation_task(request: schemas.EvaluateRequest, db) -> d
         prompt=request.prompt,
         generation_params=request.generation_params,
         evaluation_type=enums.EvaluationType.BASE_MODEL,
+        task_category=enums.TaskCategory.STANDARD,
         judge_runs=judge_run_objects
     )
 

@@ -9,7 +9,8 @@ from api_llm.routers import (
     chat_api,
     judges,
     base_evaluations,
-    judge_task_runs
+    judge_task_runs,
+    attacks,
 )
 from shared.routers import auth, system, datasets
 
@@ -32,6 +33,7 @@ app.include_router(chat_api.router)
 app.include_router(judges.router)
 app.include_router(base_evaluations.router)
 app.include_router(judge_task_runs.router)
+app.include_router(attacks.router)
 
 @app.get("/")
 def root():

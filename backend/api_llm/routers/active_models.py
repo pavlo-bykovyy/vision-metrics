@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from shared import schemas
 from shared.database import get_db
-from api_llm.services import active_models_service
+from api_llm.chat import active_models_service
 
 
 router = APIRouter(prefix="/lora/active-models", tags=["Active Models Management"])

@@ -4,47 +4,51 @@ from fastapi import HTTPException, status
 from shared import schemas, models, enums
 from shared.utils.logger import get_logger
 from api_llm.judge.trigger_task import trigger_judge_task
+from api_llm.judge.task_list_mappers import (
+    build_task_list,
+    evaluation_task_to_item,
+    judge_run_to_item,
+)
 
 
 logger = get_logger(__name__)
 
 
-def get_evaluation_tasks_for_judge_ui(db: Session, size: int = 100) -> schemas.EvaluationTaskListResponse:
+
+def list_judge_runs(db: Session, size: int = 100) -> schemas.TaskListResponse:
     """
-    Retrieves evaluation tasks from the database and formats them for the UI dropdown.
+    Retrieves the latest judge runs formatted for the tasks table.
+
+    The related evaluation task is eagerly loaded to avoid N+1 queries.
+
+    Args:
+        db (Session): The active SQLAlchemy database session.
+        size (int): The maximum number of runs to retrieve. Defaults to 100.
+
+    Returns:
+        schemas.TaskListResponse: The judge runs in the universal list shape.
+    """
+    query = (
+        db.query(models.JudgeTaskRun)
+        .options(joinedload(models.JudgeTaskRun.evaluation_task))
+        .order_by(models.JudgeTaskRun.id.desc())
+    )
+    return build_task_list(query, judge_run_to_item, size)
+
+
+def list_evaluation_tasks(db: Session, size: int = 100) -> schemas.TaskListResponse:
+    """
+    Retrieves the latest evaluation tasks formatted for the tasks table.
 
     Args:
         db (Session): The active SQLAlchemy database session.
         size (int): The maximum number of tasks to retrieve. Defaults to 100.
 
     Returns:
-        schemas.EvaluationTaskListResponse: A formatted list of evaluation tasks.
+        schemas.TaskListResponse: The evaluation tasks in the universal list shape.
     """
-    tasks = db.query(models.EvaluationTask) \
-        .order_by(models.EvaluationTask.created_at.desc()) \
-        .limit(size) \
-        .all()
-
-    result = []
-
-    for task in tasks:
-        status_value = task.status.value if hasattr(task.status, 'value') else str(task.status)
-
-        task_response = schemas.EvaluationTaskResponse(
-            id=task.id,
-            adapter_id=task.adapter_id,
-            name=task.name,
-            description=task.description,
-            prompt_template=task.prompt_template,
-            status=status_value,
-            result=task.result,
-            error_message=task.error_message,
-            created_at=task.created_at,
-            adapter=task.adapter
-        )
-        result.append(task_response)
-
-    return schemas.EvaluationTaskListResponse(tasks=result)
+    query = db.query(models.EvaluationTask).order_by(models.EvaluationTask.created_at.desc())
+    return build_task_list(query, evaluation_task_to_item, size)
 
 def create_judge_run(db: Session, payload: schemas.JudgeRunCreate) -> models.JudgeTaskRun:
     """
@@ -103,7 +107,8 @@ def create_judge_run(db: Session, payload: schemas.JudgeRunCreate) -> models.Jud
     db.refresh(new_judge_run)
 
     try:
-        celery_task_id = trigger_judge_task(new_judge_run.id)
+        is_attack = eval_task.task_category == enums.TaskCategory.ATTACK
+        celery_task_id = trigger_judge_task(new_judge_run.id, is_attack=is_attack)
 
         new_judge_run.celery_task_id = celery_task_id
         db.commit()
@@ -139,6 +144,68 @@ def get_paginated_judge_runs(db: Session, page: int = 1, size: int = 20):
         "page": page,
         "size": size,
         "pages": pages
+    }
+
+def get_judge_run(db: Session, run_id: int) -> models.JudgeTaskRun:
+    """
+    Fetches a single JudgeTaskRun by ID.
+
+    Raises:
+        HTTPException: 404 if the run does not exist.
+    """
+    run = db.query(models.JudgeTaskRun).filter(models.JudgeTaskRun.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Judge task run not found")
+    return run
+
+def get_judge_run_results(db: Session, run_id: int, page: int = 1, size: int = 50) -> dict:
+    """
+    Returns a paginated list of judge verdicts for a run, each joined with the
+    input/generated text of the evaluation result it scored.
+
+    Raises:
+        HTTPException: 404 if the run does not exist.
+    """
+    get_judge_run(db, run_id)
+
+    page = max(1, page)
+    size = max(1, size)
+
+    query = (
+        db.query(models.JudgeEvaluation, models.EvaluationResult)
+        .join(models.EvaluationResult, models.JudgeEvaluation.result_id == models.EvaluationResult.id)
+        .filter(models.JudgeEvaluation.judge_task_run_id == run_id)
+    )
+
+    total = query.count()
+    rows = (
+        query.order_by(models.JudgeEvaluation.id)
+        .offset((page - 1) * size)
+        .limit(size)
+        .all()
+    )
+
+    items = [
+        schemas.JudgeRunResultItem(
+            id=ev.id,
+            result_id=ev.result_id,
+            input_text=res.input_text,
+            generated_text=res.generated_text,
+            safety_score=ev.safety_score,
+            accuracy_score=ev.accuracy_score,
+            hallucination_score=ev.hallucination_score,
+            metric_category=ev.metric_category,
+            reasoning=ev.reasoning,
+        )
+        for ev, res in rows
+    ]
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "size": size,
+        "pages": (total + size - 1) // size,
     }
 
 def cancel_judge_run(db: Session, run_id: int, user_id: int = None) -> models.JudgeTaskRun:

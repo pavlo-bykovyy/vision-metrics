@@ -28,7 +28,10 @@ def get_all_base_evaluations(
 ):
     """Retrieves all BASE MODEL evaluation tasks from the database."""
     tasks = db.query(models.EvaluationTask) \
-        .filter(models.EvaluationTask.evaluation_type == enums.EvaluationType.BASE_MODEL) \
+        .filter(
+            models.EvaluationTask.evaluation_type == enums.EvaluationType.BASE_MODEL,
+            models.EvaluationTask.task_category == enums.TaskCategory.STANDARD,
+        ) \
         .order_by(models.EvaluationTask.created_at.desc()) \
         .all()
 

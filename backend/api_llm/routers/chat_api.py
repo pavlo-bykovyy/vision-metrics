@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from shared import schemas, models as db_models
 from shared.database import get_db
 from shared.enums import ActiveModelStatus
-from api_llm.services import chat_api_service
+from api_llm.chat import chat_api_service
 
 router = APIRouter(prefix="/lora/chat", tags=["Custom Chat API"])
 

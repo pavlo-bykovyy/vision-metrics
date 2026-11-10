@@ -193,6 +193,7 @@ def _prepare_generation_kwargs(
     generation_kwargs = {**task_params}
 
     system_prompt = generation_kwargs.pop("system_prompt", None)
+    generation_kwargs.pop("inference_prompts", None)
 
     stop_token_ids = _get_stop_token_ids(tokenizer)
     pad_token_id = stop_token_ids[0] if stop_token_ids else tokenizer.eos_token_id

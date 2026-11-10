@@ -1,36 +1,75 @@
 import gc
-import torch
+
+
+def _release_module_tensors(module) -> None:
+    """
+    Breaks accelerate hook reference cycles and detaches all parameters/buffers
+    from a PyTorch module so underlying CUDA storage is freed immediately even if
+    an outer frame or exception traceback still references the module object.
+    """
+    if module is None:
+        return
+
+    try:
+        from accelerate.hooks import remove_hook_from_submodules
+        remove_hook_from_submodules(module)
+    except Exception:
+        pass
+
+    try:
+        if hasattr(module, "cpu"):
+            module.cpu()
+    except Exception:
+        pass
+
+    try:
+        for submodule in list(module.modules()):
+            if hasattr(submodule, "_parameters"):
+                submodule._parameters.clear()
+            if hasattr(submodule, "_buffers"):
+                submodule._buffers.clear()
+        if hasattr(module, "_modules"):
+            module._modules.clear()
+    except Exception:
+        pass
 
 
 def cleanup_ml_resources(model=None, base_model=None, tokenizer=None) -> None:
     """
-    Safely removes machine learning models from memory and forces garbage collection.
+    Safely removes machine learning models from GPU memory and forces garbage collection.
 
     This is a critical step in GPU-bound environments to ensure VRAM is released
     back to the system after an evaluation task completes or fails.
-
-    Args:
-        model: The LoRA or specific instantiated model.
-        base_model: The underlying foundational LLM.
-        tokenizer: The tokenizer associated with the models.
     """
-    if model is not None:
-        del model
-    if base_model is not None:
-        del base_model
-    if tokenizer is not None:
-        del tokenizer
+    _release_module_tensors(model)
+    if base_model is not None and base_model is not model:
+        _release_module_tensors(base_model)
 
-    gc.collect()
+    del model
+    del base_model
+    del tokenizer
+
+    clear_cuda_cache()
 
 
 def clear_cuda_cache() -> None:
     """
-    Clears the graphics card (GPU) memory cache.
-
-    When PyTorch runs AI models, it holds onto video memory (VRAM) just in case
-    it needs it again. This function forces PyTorch to return any unused memory
-    back to the computer system, which helps prevent "Out Of Memory" crashes.
+    Runs Python garbage collection and clears the GPU memory cache + IPC handles.
     """
+    gc.collect()
+
+    try:
+        import torch
+    except ImportError:
+        return
+
     if torch.cuda.is_available():
+        try:
+            torch.cuda.synchronize()
+        except Exception:
+            pass
         torch.cuda.empty_cache()
+        try:
+            torch.cuda.ipc_collect()
+        except Exception:
+            pass

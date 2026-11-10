@@ -25,6 +25,14 @@ import JudgesView from "@/views/JudgesView.vue";
 import AddJudgeView from "@/views/AddJudgeView.vue";
 import JudgeTasksView from "@/views/JudgeTasksView.vue";
 import CreateJudgeView from "@/views/CreateJudgeView.vue";
+import JudgeTaskResultsView from "@/views/JudgeTaskResultsView.vue";
+import AttacksView from "@/views/attacks/AttacksView.vue";
+import AttackDatasetsView from "@/views/attacks/AttackDatasetsView.vue";
+import AttackTemplatesView from "@/views/attacks/AttackTemplatesView.vue";
+import CreateAttackView from "@/views/attacks/CreateAttackView.vue";
+import RunAttackView from "@/views/attacks/RunAttackView.vue";
+import AttackDetailsView from "@/views/attacks/AttackDetailsView.vue";
+import AttackVisualizationView from "@/views/attacks/AttackVisualizationView.vue";
 
 const routes = [
     {
@@ -169,6 +177,50 @@ const routes = [
                 component: CreateJudgeView,
                 name: 'CreateJudge'
             },
+            {
+                path: 'judge-tasks/:id/results',
+                component: JudgeTaskResultsView,
+                name: 'JudgeTaskResults',
+                props: true
+            },
+            {
+                path: 'attacks',
+                component: AttacksView,
+                name: 'Attacks'
+            },
+            {
+                path: 'attacks/datasets',
+                name: 'AttackDatasets',
+                component: AttackDatasetsView
+            },
+            {
+                path: 'attacks/templates',
+                name: 'AttackTemplates',
+                component: AttackTemplatesView
+            },
+            {
+                path: 'attacks/datasets/create',
+                alias: 'attacks/create',
+                name: 'CreateAttack',
+                component: CreateAttackView
+            },
+            {
+                path: 'attacks/run',
+                name: 'RunAttack',
+                component: RunAttackView
+            },
+            {
+                path: 'attacks/:id/visualizations',
+                name: 'AttackVisualizations',
+                component: AttackVisualizationView,
+                props: true
+            },
+            {
+                path: 'attacks/:id',
+                name: 'AttackDetails',
+                component: AttackDetailsView,
+                props: true
+            }
         ]
     }
 ]

@@ -80,6 +80,25 @@
         </div>
       </div>
 
+      <!-- Attacks Section -->
+      <div>
+        <p class="px-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">Security</p>
+        <div class="space-y-1">
+          <router-link to="/attacks/templates" class="nav-link">
+            <span class="mr-3">⚙️</span> Attack Templates
+          </router-link>
+          <router-link to="/attacks/datasets" class="nav-link">
+            <span class="mr-3">🧪</span> Attack Datasets
+          </router-link>
+          <router-link to="/attacks/run" class="nav-link">
+            <span class="mr-3">🚀</span> Run Attack
+          </router-link>
+          <router-link to="/attacks" class="nav-link">
+            <span class="mr-3">🛡️</span> Attack Runs
+          </router-link>
+        </div>
+      </div>
+
       <!-- API Section -->
       <div>
         <p class="px-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">API</p>

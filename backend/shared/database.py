@@ -17,8 +17,11 @@ DB_PASS = os.getenv("DB_PASSWORD", "superpassword")
 DB_HOST = os.getenv("DB_HOST", "db")
 DB_NAME = os.getenv("DB_NAME", "visionmetrics_db")
 
-# 2. Building the connection string for PostgreSQL.
-SQLALCHEMY_DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:5432/{DB_NAME}"
+# 2. Building the connection string for PostgreSQL (or override via DATABASE_URL for tests).
+SQLALCHEMY_DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:5432/{DB_NAME}",
+)
 
 # 3. Creating the database engine.
 # pool_pre_ping=True ensures the connection is valid before running a query,

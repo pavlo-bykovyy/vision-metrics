@@ -1,6 +1,6 @@
 import math
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from shared import models, schemas
 
 
@@ -45,7 +45,13 @@ def get_paginated_evaluation_results(
     current_page = max(1, page)
     skip = (current_page - 1) * size
 
-    results = query.order_by(models.EvaluationResult.id).offset(skip).limit(size).all()
+    results = (
+        query.options(joinedload(models.EvaluationResult.judge_evaluations))
+        .order_by(models.EvaluationResult.id)
+        .offset(skip)
+        .limit(size)
+        .all()
+    )
 
     return schemas.EvaluationResultPaginationResponse(
         items=results,
