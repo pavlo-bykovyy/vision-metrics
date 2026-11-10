@@ -93,6 +93,9 @@
             </div>
           </div>
         </div>
+        <p v-if="run.attempt > 1" class="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+          {{ t('stressTests.detail.retryNotice', { attempt: run.attempt, n_jobs: run.n_jobs ?? 'all' }) }}
+        </p>
         <p class="text-xs text-slate-400 font-medium">{{ t('stressTests.detail.progressHint') }}</p>
       </div>
 

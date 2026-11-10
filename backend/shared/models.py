@@ -855,3 +855,58 @@ class AttackChart(Base):
 
 
 
+
+
+class StressTestRun(Base):
+    """
+    One execution of the statistical stress test (`api_cv/services/stress_test`):
+    Monte Carlo simulation of controlled classifier failure modes plus the reviewer
+    analyses, publication figures and the results archive.
+
+    The outputs live on disk in `results_dir` (under the shared `UPLOAD_DIR` volume, so both the
+    API and the CV worker can reach them); the row only tracks configuration, status and progress.
+    """
+    __tablename__ = "stress_test_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=True)
+
+    celery_task_id = Column(String, nullable=True)
+    status = Column(SQLEnum(TaskStatus, name="task_status_enum"), default=TaskStatus.PENDING, nullable=False)
+    error_message = Column(Text, nullable=True)
+
+    # Simulation design (StressTestConfig fields) and the requested pipeline steps / figure options
+    config = Column(JSON, default=dict, nullable=False)
+    steps = Column(JSON, default=list, nullable=False)
+
+    # Current pipeline step ("simulate", "reviewer", "figures", "archive") and its progress in percent
+    stage = Column(String(50), nullable=True)
+    progress = Column(Float, default=0.0, nullable=False)
+
+    # Crash handling: attempt number (1 = first run) and reviewer parallelism (NULL = all cores).
+    # After a worker crash / OOM the run is retried once with n_jobs=1 (stress_test_worker.py).
+    attempt = Column(Integer, default=1, server_default="1", nullable=False)
+    n_jobs = Column(Integer, nullable=True)
+
+    results_dir = Column(String, nullable=True)
+    archive_path = Column(String, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+
+    @property
+    def has_archive(self) -> bool:
+        return bool(self.archive_path)
+
+    @classmethod
+    def get_paginated(cls, db: Session, page: int, size: int):
+        """Returns (items, total_count, pages), newest first."""
+        total_count = db.query(cls).count()
+        items = db.query(cls).order_by(cls.id.desc()).offset((page - 1) * size).limit(size).all()
+        pages = math.ceil(total_count / size) if total_count > 0 else 1
+        return items, total_count, pages
+
+    @classmethod
+    def get_by_id(cls, db: Session, run_id: int):
+        return db.query(cls).filter(cls.id == run_id).first()

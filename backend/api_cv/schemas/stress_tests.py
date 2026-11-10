@@ -136,6 +136,8 @@ class StressTestRun(BaseModel):
     status: TaskStatus
     stage: Optional[str] = None
     progress: float = 0.0
+    attempt: int = 1
+    n_jobs: Optional[int] = None
     error_message: Optional[str] = None
     config: dict
     steps: list[str]

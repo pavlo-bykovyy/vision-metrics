@@ -170,3 +170,81 @@ def test_worker_build_config():
     assert cfg.replicates == 10 and cfg.prevalences == (0.5, 0.3, 0.1, 0.05)
     assert list(cfg.severities) == [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     assert formats == ("svg",) and dpi == 120
+
+
+def _worker(monkeypatch, db):
+    pytest.importorskip("celery")
+    from api_cv.services import stress_test_worker as worker
+
+    class _Engine:
+        def dispose(self):
+            pass
+
+    monkeypatch.setattr(worker, "engine", _Engine())
+    monkeypatch.setattr(worker, "SessionLocal", lambda: db)
+    return worker
+
+
+def test_worker_skips_duplicate_delivery(db, dispatched, monkeypatch):
+    worker = _worker(monkeypatch, db)
+    run = service.create_run(db, schemas.StressTestCreateRequest())
+    run.status = enums.TaskStatus.EVALUATING
+    run.progress = 42.0
+    db.commit()
+    results = Path(run.results_dir)
+    results.mkdir(parents=True)
+    (results / "monte_carlo_raw_results.csv.gz").write_bytes(b"partial")
+
+    worker.worker_stress_test.run(run.id)
+
+    run = db.query(models.StressTestRun).one()
+    assert run.status == enums.TaskStatus.EVALUATING and run.progress == 42.0
+    assert (results / "monte_carlo_raw_results.csv.gz").exists()
+
+
+def test_recover_retries_once_with_fewer_jobs_then_fails(db, dispatched, monkeypatch):
+    worker = _worker(monkeypatch, db)
+    first = service.create_run(db, schemas.StressTestCreateRequest(name="first attempt crashed"))
+    second = service.create_run(db, schemas.StressTestCreateRequest(name="retry crashed too"))
+    queued = service.create_run(db, schemas.StressTestCreateRequest(name="queued"))
+    done = service.create_run(db, schemas.StressTestCreateRequest(name="done"))
+    first.status, first.stage, first.progress = enums.TaskStatus.EVALUATING, "reviewer", 73.4
+    second.status, second.stage, second.progress = enums.TaskStatus.EVALUATING, "reviewer", 71.0
+    second.attempt, second.n_jobs = 2, 1
+    done.status = enums.TaskStatus.COMPLETED
+    db.commit()
+
+    sent = []
+    result = worker.recover_interrupted_runs(db, dispatch=lambda run_id: sent.append(run_id) or f"again-{run_id}")
+
+    assert result == {"retried": 1, "failed": 1, "requeued": 2}
+    for run in (first, second, queued, done):
+        db.refresh(run)
+
+    # first crash -> back to PENDING with n_jobs=1 and dispatched again
+    assert first.status == enums.TaskStatus.PENDING and first.attempt == 2 and first.n_jobs == 1
+    assert first.progress == 0.0 and first.stage is None and first.error_message is None
+    assert first.celery_task_id == f"again-{first.id}"
+
+    # second crash -> FAILED with a message for the user, not re-queued
+    assert second.status == enums.TaskStatus.FAILED and second.finished_at is not None
+    assert "'reviewer'" in second.error_message and "71.0%" in second.error_message
+    assert "2/2" in second.error_message and "n_jobs=1" in second.error_message
+
+    assert queued.status == enums.TaskStatus.PENDING and queued.celery_task_id == f"again-{queued.id}"
+    assert done.status == enums.TaskStatus.COMPLETED
+    assert sorted(sent) == sorted([first.id, queued.id])
+
+
+def test_oom_error_detection():
+    pytest.importorskip("celery")
+    from api_cv.services.stress_test_worker import _is_oom_error
+
+    class TerminatedWorkerError(Exception):
+        pass
+
+    wrapped = RuntimeError("probe failed")
+    wrapped.__cause__ = TerminatedWorkerError("A worker process was killed (SIGKILL)")
+    assert _is_oom_error(MemoryError())
+    assert _is_oom_error(wrapped)
+    assert not _is_oom_error(ValueError("bad config"))
