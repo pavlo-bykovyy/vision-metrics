@@ -81,13 +81,6 @@ NON_GAUSSIAN_DISTRIBUTIONS: list[str] = list(NON_GAUSSIAN_SPECS)
 
 DEFAULT_RESULTS_DIR = "visionmetrics_stress_results_v3"
 
-# Reproducibility links of the article, written to the reviewer audit and manuscript files.
-# Format "Label: URL"; a run can override or clear them (StressTestConfig.public_links).
-ARTICLE_PUBLIC_LINKS: tuple[str, ...] = (
-    "GitHub: https://github.com/pavlo-bykovyy/vision-metrics",
-    "Kaggle: https://www.kaggle.com/code/xrustya/v3visionmetrics-statistical-stress-test",
-)
-
 
 def _default_severities() -> np.ndarray:
     return np.round(np.linspace(0.0, 1.0, 11), 2)
@@ -127,7 +120,7 @@ class StressTestConfig:
     n_boot: int = 1000
 
     # "Label: URL" entries for the reviewer audit / manuscript text; empty -> no links written
-    public_links: tuple[str, ...] = ARTICLE_PUBLIC_LINKS
+    public_links: tuple[str, ...] = ()
 
     @property
     def severity_band_edges(self) -> tuple[float, float]:

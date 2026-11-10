@@ -35,12 +35,6 @@ OOD_DISTRIBUTIONS: list[str] = [
     "Heteroscedastic Gaussian (sigma0=0.65, sigma1=1.45)",
 ]
 
-# Mirrors stress_test.config.ARTICLE_PUBLIC_LINKS.
-ARTICLE_PUBLIC_LINKS: list[str] = [
-    "GitHub: https://github.com/pavlo-bykovyy/vision-metrics",
-    "Kaggle: https://www.kaggle.com/code/xrustya/v3visionmetrics-statistical-stress-test",
-]
-
 PLATFORM_METRICS: list[str] = [
     "accuracy", "precision", "recall", "f1_score", "mcc", "balanced_accuracy",
     "roc_auc", "pr_auc", "log_loss_value", "brier_score",
@@ -76,7 +70,7 @@ class StressTestConfigSchema(BaseModel):
     n_boot: int = Field(1000, ge=10, le=100_000)
 
     public_links: list[str] = Field(
-        default_factory=lambda: list(ARTICLE_PUBLIC_LINKS),
+        default_factory=list,
         max_length=10,
         description="'Label: URL' lines written to the reviewer audit and manuscript files; empty list = none",
     )

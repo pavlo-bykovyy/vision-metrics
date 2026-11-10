@@ -179,11 +179,12 @@ def test_ood_crosscheck_reproduces_table_11(tiny_raw):
 
 
 def test_reproducibility_row_uses_configured_links():
-    row = reviewer._reproducibility_row(CFG)
+    links = ("GitHub: https://example.org/repo", "Kaggle: https://example.org/notebook")
+    row = reviewer._reproducibility_row(StressTestConfig(public_links=links))
     assert row[1].startswith("GitHub + Kaggle; fixed random seed")
-    assert row[2] == " | ".join(link.split(": ", 1)[1] for link in CFG.public_links)
+    assert row[2] == "https://example.org/repo | https://example.org/notebook"
 
-    none = reviewer._reproducibility_row(StressTestConfig(public_links=()))
+    none = reviewer._reproducibility_row(CFG)
     assert none[1] == f"Fixed random seed {CFG.seed}"
     assert none[2] == "no public links configured"
 
