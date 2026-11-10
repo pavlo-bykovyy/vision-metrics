@@ -1,12 +1,17 @@
 FROM visionmetrics_base_image:latest
 
-COPY requirements_*.txt ./
+COPY config/requirements_cv.txt config/requirements_ml_shared.txt config/constraints.txt ./
 
-RUN pip install --upgrade pip && \
-    pip install --default-timeout=1000 --no-cache-dir -r requirements_cv.txt
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends libgl1 libglib2.0-0; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/* /usr/share/man/*; \
+    pip install --default-timeout=1000 --no-compile \
+        -c constraints.txt -r requirements_cv.txt; \
+    SP="$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"; \
+    find "$SP" -name "*.a" -delete; \
+    find "$SP" -type d \( -name "__pycache__" -o -name "tests" -o -name "test" \) -prune -exec rm -rf {} + 2>/dev/null || true; \
+    rm -rf /root/.cache /tmp/* /var/tmp/*
 
 COPY . .
-
-RUN chmod +x entrypoint.sh
-
-ENTRYPOINT ["./entrypoint.sh"]

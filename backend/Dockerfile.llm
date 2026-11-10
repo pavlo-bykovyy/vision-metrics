@@ -1,12 +1,15 @@
 FROM visionmetrics_base_image:latest
 
-COPY requirements_*.txt ./
+COPY config/requirements_llm.txt config/requirements_ml_shared.txt config/constraints.txt ./
 
-RUN pip install --upgrade pip && \
-    pip install --default-timeout=1000 --no-cache-dir -r requirements_llm.txt
+RUN set -eux; \
+    pip install --default-timeout=1000 --no-compile \
+        -c constraints.txt -r requirements_llm.txt; \
+    SP="$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"; \
+    find "$SP" -name "*.a" -delete; \
+    find "$SP" -name "*.pyc" -delete; \
+    rm -f "$SP"/bitsandbytes/libbitsandbytes_cuda11*.so; \
+    rm -rf "$SP"/pyarrow/include; \
+    find "$SP" -type d \( -name "__pycache__" -o -name "tests" -o -name "test" \) -prune -exec rm -rf {} + 2>/dev/null || true
 
 COPY . .
-
-RUN chmod +x entrypoint.sh
-
-ENTRYPOINT ["./entrypoint.sh"]

@@ -1,13 +1,33 @@
+
+x-api-build: &api-build
+  context: ./backend
+  dockerfile: Dockerfile.api
+  additional_contexts:
+    base_image: service:base_image
+
+x-cv-build: &cv-build
+  context: ./backend
+  dockerfile: Dockerfile.cv
+  additional_contexts:
+    base_image: service:base_image
+
+x-llm-build: &llm-build
+  context: ./backend
+  dockerfile: Dockerfile.llm
+  additional_contexts:
+    base_image: service:base_image
+
 services:
 
   base_image:
     build:
       context: ./backend
       dockerfile: Dockerfile.base
+      target: ${BASE_TARGET:-base}
     image: visionmetrics_base_image:latest
     container_name: visionmetrics_base_builder
-    profiles:
-      - setup
+    command: [ "true" ]
+    restart: "no"
 
   db:
     image: postgres:15-alpine
@@ -26,9 +46,8 @@ services:
       retries: 5
 
   db_migrations:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.api
+    build: *api-build
+    image: visionmetrics_api:latest
     container_name: visionmetrics_db_migrations
     depends_on:
       db:
@@ -46,11 +65,10 @@ services:
     networks:
       - visionmetrics_net
 
-  api_cv:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.api
-    container_name: visionmetrics_api_cv
+  api:
+    build: *api-build
+    image: visionmetrics_api:latest
+    container_name: visionmetrics_api
     restart: always
     depends_on:
       db:
@@ -63,36 +81,16 @@ services:
       - .env.db
       - .env.shared
       - .env.api
-    command: ["uvicorn", "api_cv.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: [ "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000" ]
     volumes:
       - uploaded_models:/app/uploaded_models
       - ./backend/migrations:/app/migrations
     networks:
       - visionmetrics_net
 
-  api_llm:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.api
-    container_name: visionmetrics_api_llm
-    restart: always
-    depends_on:
-      - db
-      - redis
-    env_file:
-      - .env.db
-      - .env.shared
-      - .env.api
-    command: ["uvicorn", "api_llm.main:app", "--host", "0.0.0.0", "--port", "8001"]
-    volumes:
-      - uploaded_models:/app/uploaded_models
-    networks:
-      - visionmetrics_net
-
   celery_worker_cv:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.cv
+    build: *cv-build
+    image: visionmetrics_cv:latest
     container_name: visionmetrics_celery_worker_cv
     restart: always
     shm_size: '4gb'
@@ -114,9 +112,8 @@ services:
       - visionmetrics_net
 
   celery_worker_llm:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.llm
+    build: *llm-build
+    image: visionmetrics_llm:latest
     container_name: visionmetrics_celery_worker_llm
     restart: always
     shm_size: '4gb'
@@ -130,7 +127,7 @@ services:
       - .env.shared
       - .env.api
       - .env.llm
-    command: [ "celery", "-A", "api_llm.services.celery_app", "worker", "-Q", "llm_tasks,judge_tasks", "--loglevel=info", "--pool=solo" ]
+    command: [ "celery", "-A", "api_llm.services.celery_app", "worker", "-Q", "llm_tasks,judge_tasks,attack_build_dataset_tasks,attack_generation_tasks,attack_judge_tasks", "--loglevel=info", "--pool=solo" ]
     volumes:
       - uploaded_models:/app/uploaded_models
       - extracted_datasets:/app/extracted_datasets
@@ -139,9 +136,8 @@ services:
       - visionmetrics_net
 
   celery_worker_chat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.llm
+    build: *llm-build
+    image: visionmetrics_llm:latest
     container_name: visionmetrics_celery_worker_chat_dev
     restart: always
     depends_on:
@@ -164,9 +160,8 @@ services:
       - visionmetrics_net
 
   model_state_manager:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.llm
+    build: *api-build
+    image: visionmetrics_llm:latest
     container_name: visionmetrics_state_manager_dev
     depends_on:
       db:
@@ -178,17 +173,17 @@ services:
     env_file:
       - .env.db
       - .env.shared
-    command: [ "python", "-m", "api_llm.services.model_state_manager" ]
+    command: [ "python", "-m", "state_manager.main" ]
     networks:
       - visionmetrics_net
 
   ui:
     build: ./frontend
+    image: visionmetrics_ui:latest
     container_name: visionmetrics_ui
     restart: always
     depends_on:
-      - api_cv
-      - api_llm
+      - api
     networks:
       - visionmetrics_net
 
@@ -202,8 +197,7 @@ services:
       - ./backend/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - ui
-      - api_cv
-      - api_llm
+      - api
     networks:
       - visionmetrics_net
 
