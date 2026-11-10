@@ -1,32 +1,22 @@
-import os
-from celery import Celery
+from shared.celery_factory import create_celery_app
+from api_llm import queues as q
 
-redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
-celery_app = Celery(
+celery_app = create_celery_app(
     "visionmetrics_llm",
-    broker=redis_url,
-    backend=redis_url,
     include=[
         "api_llm.services.worker",
-        "api_llm.services.chat_worker",
-        "api_llm.judge.worker"
-    ]
-)
-
-celery_app.conf.task_routes = {
-    'llm.evaluation': {'queue': 'llm_tasks'},
-    'llm.judge.evaluation': {'queue': 'judge_tasks'},
-    'chat.generate_text': {'queue': 'chat_tasks'}
-}
-
-celery_app.conf.update(
-    task_serializer='json',
-    accept_content=['json'],
-    result_serializer='json',
-    timezone='UTC',
-    enable_utc=True,
-    broker_connection_retry_on_startup=True,
-    task_time_limit=86400,
-    task_soft_time_limit=86000
+        "api_llm.workers.chat.chat_worker",
+        "api_llm.judge.worker",
+        "api_llm.workers.attacks.attack_worker",
+        "api_llm.workers.attacks.judge_worker",
+    ],
+    task_routes={
+        q.LLM_EVALUATION_TASK: {"queue": q.LLM_QUEUE},
+        q.JUDGE_EVALUATION_TASK: {"queue": q.JUDGE_EVALUATION_QUEUE},
+        q.CHAT_TASK: {"queue": q.CHAT_QUEUE},
+        q.ATTACK_DATASET_TASK: {"queue": q.ATTACK_DATASET_QUEUE},
+        q.ATTACK_GENERATION_TASK: {"queue": q.ATTACK_GENERATION_QUEUE},
+        q.ATTACK_JUDGE_TASK: {"queue": q.ATTACK_JUDGE_QUEUE},
+    },
 )
