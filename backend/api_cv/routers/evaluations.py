@@ -1,8 +1,17 @@
+from typing import Literal, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 
 from shared import models, schemas
 from api_cv.services import services
+from api_cv.services.report import (
+    load,
+    build_report,
+    to_html,
+    to_markdown,
+)
 from shared.database import get_db
 from shared.dependencies import verify_token
 from shared.utils.logger import get_logger
@@ -194,3 +203,26 @@ def cancel_evaluation(
 
     return {"message": f"Evaluation {evaluation_id} has been successfully cancelled."}
 
+
+@router.get("/{evaluation_id}/report")
+def get_evaluation_report(
+    evaluation_id: int,
+    format: Literal["json", "md", "html"] = "json",
+    baseline_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
+    meta, profile = load(db, evaluation_id)
+
+    base_meta = base_profile = None
+    if baseline_id is not None:
+        base_meta, base_profile = load(db, baseline_id)
+        if base_meta["dataset_id"] != meta["dataset_id"]:
+            raise HTTPException(422, "Baseline must be evaluated on the same dataset")
+
+    report = build_report(meta, profile, base_meta, base_profile)
+
+    if format == "md":
+        return PlainTextResponse(to_markdown(report), media_type="text/markdown; charset=utf-8")
+    if format == "html":
+        return HTMLResponse(to_html(report))
+    return report

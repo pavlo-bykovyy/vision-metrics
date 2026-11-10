@@ -194,6 +194,257 @@
         </div>
       </div>
 
+      <!-- Diagnostic Report Box -->
+      <div v-if="evaluation.metrics" class="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden mt-8">
+        <!-- Header & Controls -->
+        <div class="px-10 py-8 border-b border-slate-100 bg-slate-50/40 flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+          <div class="space-y-1.5">
+            <div class="flex items-center gap-3 flex-wrap">
+              <h2 class="text-xl font-black text-slate-800 tracking-tight">Diagnostic Report</h2>
+              <span
+                v-if="report"
+                class="px-3.5 py-1 rounded-xl text-xs font-black uppercase tracking-wider border shadow-sm"
+                :class="statusBadgeClass(report.status)"
+              >
+                {{ report.status }}
+              </span>
+            </div>
+            <p class="text-sm text-slate-500 font-medium">
+              Automated metric discordance analysis and failure signature comparison
+            </p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <!-- Baseline Selector -->
+            <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm">
+              <label for="baseline-select" class="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                Baseline:
+              </label>
+              <select
+                id="baseline-select"
+                v-model="selectedBaselineId"
+                @change="onBaselineChange"
+                class="text-sm font-semibold text-slate-700 bg-transparent focus:outline-none pr-2"
+              >
+                <option :value="null">None</option>
+                <option
+                  v-for="item in candidateBaselines"
+                  :key="item.id"
+                  :value="item.id"
+                >
+                  #{{ item.id }} — {{ item.model?.name || `Model #${item.model_id}` }}
+                  <template v-if="item.metrics?.roc_auc != null">
+                    (AUC {{ Number(item.metrics.roc_auc).toFixed(3) }})
+                  </template>
+                </option>
+              </select>
+            </div>
+
+            <!-- Export / View Buttons -->
+            <button
+              @click="downloadReport('md')"
+              :disabled="!report || exportingFormat !== null"
+              class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-blue-600 bg-white border border-slate-200 hover:border-blue-200 rounded-xl transition-colors shadow-sm disabled:opacity-50"
+              title="Download Markdown Report"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+              Markdown
+            </button>
+
+            <button
+              @click="openHtmlReport"
+              :disabled="!report || exportingFormat !== null"
+              class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-blue-600 bg-white border border-slate-200 hover:border-blue-200 rounded-xl transition-colors shadow-sm disabled:opacity-50"
+              title="Open Standalone HTML Report"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+              HTML Report
+            </button>
+
+            <button
+              @click="downloadReport('json')"
+              :disabled="!report"
+              class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-blue-600 bg-white border border-slate-200 hover:border-blue-200 rounded-xl transition-colors shadow-sm disabled:opacity-50"
+              title="Download Report JSON"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+              JSON
+            </button>
+          </div>
+        </div>
+
+        <!-- Loading / Error States -->
+        <div v-if="reportLoading" class="p-10 text-center text-sm font-medium text-slate-400 animate-pulse">
+          Analyzing metric profile...
+        </div>
+
+        <div v-else-if="reportError" class="p-10">
+          <div class="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl px-6 py-4 text-sm font-medium">
+            {{ reportError }}
+          </div>
+        </div>
+
+        <!-- Report Body -->
+        <div v-else-if="report" class="p-10 space-y-8">
+          <!-- Profile Summary Strip -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">Samples (N)</div>
+              <div class="text-xl font-black text-slate-800 mt-1">{{ report.profile?.n ?? '—' }}</div>
+            </div>
+            <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">Prevalence</div>
+              <div class="text-xl font-black text-slate-800 mt-1">{{ formatNumber(report.profile?.prevalence) }}</div>
+            </div>
+            <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">Pred. Positive Rate</div>
+              <div class="text-xl font-black text-slate-800 mt-1">{{ formatNumber(report.profile?.predicted_positive_rate) }}</div>
+            </div>
+            <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">Specificity</div>
+              <div class="text-xl font-black text-slate-800 mt-1">{{ formatNumber(report.profile?.metrics?.specificity) }}</div>
+            </div>
+            <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">Threshold</div>
+              <div class="text-xl font-black text-slate-800 mt-1">{{ report.profile?.threshold ?? 0.5 }}</div>
+            </div>
+          </div>
+
+          <!-- Findings Section -->
+          <div class="space-y-4">
+            <h3 class="text-base font-black text-slate-800 uppercase tracking-wider">
+              Findings ({{ report.findings?.length || 0 }})
+            </h3>
+
+            <div
+              v-if="!report.findings || report.findings.length === 0"
+              class="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-6 flex items-center gap-3 text-emerald-800"
+            >
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+              <span class="text-sm font-bold">No metric discordance patterns detected.</span>
+            </div>
+
+            <div v-else class="space-y-4">
+              <div
+                v-for="(finding, idx) in report.findings"
+                :key="finding.code || idx"
+                class="rounded-2xl p-6 border transition-all"
+                :class="findingCardClass(finding.severity)"
+              >
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2.5 flex-wrap">
+                    <span
+                      class="px-2.5 py-0.5 rounded-lg text-[11px] font-black uppercase tracking-wider"
+                      :class="findingBadgeClass(finding.severity)"
+                    >
+                      {{ finding.severity }}
+                    </span>
+                    <h4 class="text-base font-black text-slate-900">{{ finding.title }}</h4>
+                  </div>
+                  <code class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-white/80 text-slate-700 border border-slate-200/70">
+                    {{ finding.code }}
+                  </code>
+                </div>
+
+                <p v-if="finding.hint" class="text-sm text-slate-700 font-medium mt-1">
+                  {{ finding.hint }}
+                </p>
+
+                <div
+                  v-if="finding.evidence && Object.keys(finding.evidence).length > 0"
+                  class="flex flex-wrap gap-2 mt-4"
+                >
+                  <span
+                    v-for="(val, key) in finding.evidence"
+                    :key="key"
+                    class="inline-flex items-center gap-1.5 text-xs font-mono bg-white/90 border border-slate-200/80 text-slate-700 px-3 py-1 rounded-xl"
+                  >
+                    <span class="text-slate-400 font-semibold">{{ key }}:</span>
+                    <strong class="text-slate-900">{{ formatNumber(val) }}</strong>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Baseline Comparison Section -->
+          <div v-if="report.baseline" class="space-y-6 pt-4 border-t border-slate-100">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <h3 class="text-base font-black text-slate-800 uppercase tracking-wider">
+                Comparison with Baseline #{{ report.baseline.meta?.evaluation_id }}
+                <span v-if="report.baseline.meta?.model_name" class="text-slate-500 font-bold normal-case">
+                  ({{ report.baseline.meta.model_name }})
+                </span>
+              </h3>
+            </div>
+
+            <!-- Hypotheses -->
+            <div class="space-y-3">
+              <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Failure Signature Hypotheses
+              </h4>
+              <div
+                v-if="!report.baseline.hypotheses || report.baseline.hypotheses.length === 0"
+                class="bg-slate-50 border border-slate-200/70 rounded-2xl px-5 py-4 text-sm text-slate-600 font-medium"
+              >
+                No similarity to the controlled failure signatures.
+              </div>
+              <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div
+                  v-for="(hyp, hIdx) in report.baseline.hypotheses"
+                  :key="hIdx"
+                  class="bg-amber-50/70 border border-amber-200 rounded-2xl p-5 space-y-1.5"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-sm font-black text-amber-900 font-mono">
+                      {{ hyp.similar_to }}
+                    </span>
+                    <span class="px-2.5 py-0.5 rounded-lg text-[11px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-200">
+                      {{ hyp.confidence }} confidence
+                    </span>
+                  </div>
+                  <p class="text-xs text-amber-900/90 font-medium">
+                    {{ hyp.why }}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Metric Deltas Table -->
+            <div class="space-y-3">
+              <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                11D Metric Profile Deltas (Current vs Baseline)
+              </h4>
+              <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div
+                  v-for="(delta, metricKey) in report.baseline.deltas"
+                  :key="metricKey"
+                  class="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col justify-between"
+                >
+                  <div class="text-xs font-bold text-slate-500">{{ formatMetricLabel(metricKey) }}</div>
+                  <div class="flex items-baseline justify-between gap-2 mt-2">
+                    <span class="text-sm font-bold text-slate-700">
+                      {{ formatNumber(report.profile?.metrics?.[metricKey]) }}
+                    </span>
+                    <span
+                      class="text-xs font-mono font-black px-2 py-0.5 rounded-lg"
+                      :class="deltaBadgeClass(metricKey, delta)"
+                    >
+                      {{ formatDelta(delta) }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Disclaimer Footer -->
+          <div v-if="report.disclaimer" class="pt-4 border-t border-slate-100 text-xs text-slate-400 italic leading-relaxed">
+            {{ report.disclaimer }}
+          </div>
+        </div>
+      </div>
+
       <!-- Raw JSON Data Box -->
       <div class="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden mt-8">
         <div class="px-10 py-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
@@ -216,7 +467,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
 import { useI18n } from 'vue-i18n'
@@ -226,11 +477,80 @@ const route = useRoute()
 const evaluation = ref(null)
 const loading = ref(true)
 
+const report = ref(null)
+const reportLoading = ref(false)
+const reportError = ref(null)
+const selectedBaselineId = ref(null)
+const candidateBaselines = ref([])
+const exportingFormat = ref(null)
+
 const API_URL = import.meta.env.VITE_API_URL || ''
+
+const METRIC_LABELS = {
+  accuracy: 'Accuracy',
+  precision: 'Precision',
+  recall: 'Recall',
+  specificity: 'Specificity',
+  f1: 'F1 Score',
+  balanced_accuracy: 'Balanced Accuracy',
+  mcc: 'MCC',
+  roc_auc: 'ROC AUC',
+  pr_auc: 'PR AUC',
+  log_loss: 'Log Loss',
+  brier_score: 'Brier Score'
+}
+
+const LOWER_IS_BETTER = new Set(['log_loss', 'brier_score'])
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 const formatMetric = (value) => {
   if (value === null || value === undefined) return '—'
   return (value * 100).toFixed(2) + '%'
+}
+
+const formatNumber = (value) => {
+  if (value === null || value === undefined) return '—'
+  return typeof value === 'number' ? value.toFixed(4) : String(value)
+}
+
+const formatMetricLabel = (key) => METRIC_LABELS[key] || key
+
+const formatDelta = (delta) => {
+  if (delta === null || delta === undefined) return '—'
+  const sign = delta > 0 ? '+' : ''
+  return `${sign}${Number(delta).toFixed(4)}`
+}
+
+const statusBadgeClass = (status) => {
+  if (status === 'critical') return 'bg-red-50 text-red-700 border-red-200'
+  if (status === 'warning') return 'bg-amber-50 text-amber-700 border-amber-200'
+  return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+}
+
+const findingCardClass = (severity) => {
+  if (severity === 'critical') return 'bg-red-50/60 border-red-200'
+  if (severity === 'warning') return 'bg-amber-50/60 border-amber-200'
+  return 'bg-blue-50/60 border-blue-200'
+}
+
+const findingBadgeClass = (severity) => {
+  if (severity === 'critical') return 'bg-red-600 text-white'
+  if (severity === 'warning') return 'bg-amber-500 text-white'
+  return 'bg-blue-600 text-white'
+}
+
+const deltaBadgeClass = (metricKey, delta) => {
+  if (delta === null || delta === undefined || Math.abs(delta) < 1e-6) {
+    return 'bg-slate-200/70 text-slate-600'
+  }
+  const improved = LOWER_IS_BETTER.has(metricKey) ? delta < 0 : delta > 0
+  return improved
+    ? 'bg-emerald-100 text-emerald-800'
+    : 'bg-red-100 text-red-800'
 }
 
 const formatBytes = (bytes) => {
@@ -256,20 +576,162 @@ const copyToClipboard = async (text) => {
   }
 }
 
+const fetchDiagnosticReport = async () => {
+  if (!evaluation.value?.metrics) return
+  reportLoading.value = true
+  reportError.value = null
+  try {
+    const params = { format: 'json' }
+    if (selectedBaselineId.value !== null) {
+      params.baseline_id = selectedBaselineId.value
+    }
+    const response = await axios.get(
+      `${API_URL}/evaluations/${route.params.id}/report`,
+      { params, headers: getAuthHeaders() }
+    )
+    report.value = response.data
+  } catch (error) {
+    report.value = null
+    reportError.value =
+      error.response?.data?.detail || 'Failed to load diagnostic report for this evaluation.'
+  } finally {
+    reportLoading.value = false
+  }
+}
+
+const fetchCandidateBaselines = async () => {
+  if (!evaluation.value?.dataset_id) return
+  try {
+    const response = await axios.get(`${API_URL}/evaluations/`, {
+      params: { page: 1, size: 100 },
+      headers: getAuthHeaders()
+    })
+    const items = response.data?.items || []
+    candidateBaselines.value = items.filter(
+      (item) =>
+        item.id !== evaluation.value.id &&
+        item.dataset_id === evaluation.value.dataset_id &&
+        item.status === 'completed' &&
+        item.metrics &&
+        (item.metrics.averaging_mode || 'binary') === 'binary'
+    )
+  } catch (error) {
+    console.error('Error fetching candidate baselines:', error)
+  }
+}
+
+const onBaselineChange = () => {
+  fetchDiagnosticReport()
+}
+
+const triggerBlobDownload = (content, mimeType, filename) => {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+const downloadReport = async (format) => {
+  if (!evaluation.value) return
+  const evalId = evaluation.value.id
+  const baseSuffix = selectedBaselineId.value ? `_vs_${selectedBaselineId.value}` : ''
+
+  if (format === 'json' && report.value) {
+    triggerBlobDownload(
+      JSON.stringify(report.value, null, 2),
+      'application/json;charset=utf-8',
+      `evaluation_${evalId}_report${baseSuffix}.json`
+    )
+    return
+  }
+
+  exportingFormat.value = format
+  try {
+    const params = { format }
+    if (selectedBaselineId.value !== null) {
+      params.baseline_id = selectedBaselineId.value
+    }
+    const response = await axios.get(`${API_URL}/evaluations/${evalId}/report`, {
+      params,
+      headers: getAuthHeaders(),
+      responseType: 'text'
+    })
+    const mime = format === 'md' ? 'text/markdown;charset=utf-8' : 'text/html;charset=utf-8'
+    triggerBlobDownload(
+      response.data,
+      mime,
+      `evaluation_${evalId}_report${baseSuffix}.${format}`
+    )
+  } catch (error) {
+    console.error(`Failed to export ${format} report:`, error)
+    alert(error.response?.data?.detail || `Failed to export ${format.toUpperCase()} report.`)
+  } finally {
+    exportingFormat.value = null
+  }
+}
+
+const openHtmlReport = async () => {
+  if (!evaluation.value) return
+  exportingFormat.value = 'html'
+  try {
+    const params = { format: 'html' }
+    if (selectedBaselineId.value !== null) {
+      params.baseline_id = selectedBaselineId.value
+    }
+    const response = await axios.get(
+      `${API_URL}/evaluations/${evaluation.value.id}/report`,
+      {
+        params,
+        headers: getAuthHeaders(),
+        responseType: 'text'
+      }
+    )
+    const blob = new Blob([response.data], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank', 'noopener,noreferrer')
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
+  } catch (error) {
+    console.error('Failed to open HTML report:', error)
+    alert(error.response?.data?.detail || 'Failed to open HTML report.')
+  } finally {
+    exportingFormat.value = null
+  }
+}
+
 const fetchEvaluationDetails = async () => {
   loading.value = true
+  report.value = null
+  reportError.value = null
+  selectedBaselineId.value = null
+  candidateBaselines.value = []
   try {
-    const token = localStorage.getItem('token')
     const response = await axios.get(`${API_URL}/evaluations/${route.params.id}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: getAuthHeaders()
     })
     evaluation.value = response.data
+    if (evaluation.value?.metrics) {
+      await Promise.all([fetchDiagnosticReport(), fetchCandidateBaselines()])
+    }
   } catch (error) {
     console.error("Error fetching evaluation details:", error)
   } finally {
     loading.value = false
   }
 }
+
+watch(
+  () => route.params.id,
+  (newId, oldId) => {
+    if (newId && newId !== oldId) {
+      fetchEvaluationDetails()
+    }
+  }
+)
 
 onMounted(() => {
   fetchEvaluationDetails()
