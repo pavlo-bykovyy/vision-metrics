@@ -33,6 +33,9 @@ import CreateAttackView from "@/views/attacks/CreateAttackView.vue";
 import RunAttackView from "@/views/attacks/RunAttackView.vue";
 import AttackDetailsView from "@/views/attacks/AttackDetailsView.vue";
 import AttackVisualizationView from "@/views/attacks/AttackVisualizationView.vue";
+import StressTestsView from "@/views/stressTests/StressTestsView.vue";
+import CreateStressTestView from "@/views/stressTests/CreateStressTestView.vue";
+import StressTestDetailView from "@/views/stressTests/StressTestDetailView.vue";
 
 const routes = [
     {
@@ -145,6 +148,22 @@ const routes = [
                 path: 'evaluations/:id',
                 name: 'EvaluationDetails',
                 component: EvaluationDetail,
+                props: true
+            },
+            {
+                path: 'stress-tests',
+                name: 'StressTests',
+                component: StressTestsView
+            },
+            {
+                path: 'stress-tests/create',
+                name: 'CreateStressTest',
+                component: CreateStressTestView
+            },
+            {
+                path: 'stress-tests/:id',
+                name: 'StressTestDetails',
+                component: StressTestDetailView,
                 props: true
             },
             {

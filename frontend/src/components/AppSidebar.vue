@@ -25,6 +25,9 @@
           <router-link to="/evaluations" class="nav-link">
             <span class="mr-3">📈</span> Evaluations
           </router-link>
+          <router-link to="/stress-tests" class="nav-link">
+            <span class="mr-3">🧪</span> Stress Tests
+          </router-link>
         </div>
       </div>
 

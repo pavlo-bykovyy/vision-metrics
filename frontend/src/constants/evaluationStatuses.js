@@ -39,6 +39,14 @@ export const STATUS_CONFIG = {
         isSpinning: false,
         isActive: false
     },
+    canceled: {
+        bgClass: 'bg-orange-50',
+        textClass: 'text-orange-600',
+        labelKey: 'common.canceled',
+        fallbackLabel: 'Canceled',
+        isSpinning: false,
+        isActive: false
+    },
     pending: {
         bgClass: 'bg-slate-100',
         textClass: 'text-slate-500',

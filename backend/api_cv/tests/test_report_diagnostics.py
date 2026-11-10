@@ -6,6 +6,7 @@ from api_cv.services.report.diagnostics import MetricProfile, analyze, build_rep
 from api_cv.services.report.probe_experiments import (
     compute_group_stats,
     normalize_diagnostic_dataframe,
+    stable_wilcoxon_greater,
 )
 
 
@@ -22,6 +23,21 @@ def test_efficientnet_b4_single_class_collapse():
     assert "RANKING_DECISION_GAP" not in codes  # roc_auc 0.682 < 0.70
     assert "F1_MCC_DISCORDANCE" in codes
     assert build_report({"evaluation_id": 1}, p)["status"] == "critical"
+
+
+def test_xception5o_paper_alerts():
+    """Section 4.6: exactly CLASS_ASYMMETRY and PROBABILITIES_WORSE_THAN_CONSTANT."""
+    p = MetricProfile(accuracy=533 / 1289, precision=16 / 88, recall=0.0229, specificity=0.8778,
+                      f1=0.04, balanced_accuracy=0.4504, mcc=-0.1963, roc_auc=0.4681, pr_auc=0.4883,
+                      log_loss=5.1303, brier_score=0.5667, tp=16, fp=72, tn=517, fn=684)
+    assert _codes(p) == {"CLASS_ASYMMETRY", "PROBABILITIES_WORSE_THAN_CONSTANT"}
+
+
+def test_probability_alert_requires_both_losses_above_constant():
+    base = dict(accuracy=0.8, recall=0.8, specificity=0.8, balanced_accuracy=0.8, f1=0.8, mcc=0.6, roc_auc=0.88)
+    assert "PROBABILITIES_WORSE_THAN_CONSTANT" not in _codes(MetricProfile(**base, log_loss=0.9, brier_score=0.2))
+    assert "PROBABILITIES_WORSE_THAN_CONSTANT" not in _codes(MetricProfile(**base, log_loss=0.5, brier_score=0.3))
+    assert "PROBABILITIES_WORSE_THAN_CONSTANT" in _codes(MetricProfile(**base, log_loss=0.9, brier_score=0.3))
 
 
 def test_meso4_inverted_ranking():
@@ -58,7 +74,7 @@ def test_baseline_calibration_drift_hypothesis():
 
 def test_probe_experiments_normalize_and_group_stats():
     df = pd.DataFrame({
-        "degradation_class": ["collapse:positive", "score_bias:negative"],
+        "path_label": ["collapse:positive", "score_bias:negative"],
         "group_id": [1, 2],
         "lambda": [0.1, 0.2],
         "accuracy": [0.54, 0.60],
@@ -85,4 +101,21 @@ def test_probe_experiments_normalize_and_group_stats():
     grp_scores, ci_low, ci_high = compute_group_stats(y_true, y_pred, groups, n_boot=200)
     assert list(grp_scores) == [0.5, 1.0]
     assert 0.5 <= ci_low <= ci_high <= 1.0
+
+
+def test_group_stats_use_balanced_accuracy_per_group():
+    y_true = np.array(["a", "a", "a", "b"])
+    y_pred = np.array(["a", "a", "a", "a"])
+    scores, lo, hi = compute_group_stats(y_true, y_pred, np.array([1, 1, 1, 1]), n_boot=50)
+    assert list(scores) == [0.5]  # recall a=1, recall b=0 -> BA 0.5 (plain accuracy would be 0.75)
+    assert lo == hi == 0.5
+
+
+def test_stable_wilcoxon_reports_underflow_and_zero_diffs():
+    ref = np.linspace(0.8, 1.0, 4000)
+    stats = stable_wilcoxon_greater(ref, ref - 0.3)
+    assert stats["p_report"] == "p < 1e-100"
+    assert stats["log10_p"] < -100
+    assert stable_wilcoxon_greater(ref, ref)["p_report"].startswith("n/a")
+    assert stable_wilcoxon_greater(ref, ref - 1e-3 * np.sin(np.arange(4000)))["p_report"].startswith("p = ")
 

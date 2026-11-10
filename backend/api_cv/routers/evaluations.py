@@ -210,6 +210,7 @@ def get_evaluation_report(
     format: Literal["json", "md", "html"] = "json",
     baseline_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_token),
 ):
     meta, profile = load(db, evaluation_id)
 

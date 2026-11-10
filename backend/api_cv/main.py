@@ -4,7 +4,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from shared.utils.cors import setup_cors
-from api_cv.routers import ai_models, evaluations
+from api_cv.routers import ai_models, evaluations, stress_tests
 from shared.routers import auth, system, datasets
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -21,6 +21,7 @@ app.include_router(system.router)
 app.include_router(datasets.router)
 app.include_router(ai_models.router)
 app.include_router(evaluations.router)
+app.include_router(stress_tests.router)
 
 @app.get("/")
 def root():

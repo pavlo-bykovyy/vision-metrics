@@ -76,7 +76,9 @@ def calculate_metrics(prediction_result: 'PredictionResult',
         metrics["pr_auc"] = None
 
     try:
-        metrics["log_loss_value"] = float(log_loss(y_true, y_pred_probs))
+        # Explicit labels: a dataset with a single class still gets a value (same call as the stress test).
+        labels = [0, 1] if last_dim == 1 else list(range(last_dim))
+        metrics["log_loss_value"] = float(log_loss(y_true, y_pred_probs, labels=labels))
     except Exception:
         metrics["log_loss_value"] = None
 

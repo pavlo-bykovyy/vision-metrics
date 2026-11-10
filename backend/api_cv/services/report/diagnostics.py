@@ -143,10 +143,11 @@ def analyze(p: MetricProfile) -> list[Finding]:
             "Typical for an operating-point or score-shift problem; consider threshold review.",
         ))
 
-    # 5. Probabilities worse than a constant 0.5 predictor
+    # 5. Probabilities worse than a constant 0.5 predictor: both Log Loss and Brier Score must
+    #    exceed their constant baselines (paper, Section 4.6)
     ll_bad = p.log_loss is not None and p.log_loss > LN2
     br_bad = p.brier_score is not None and p.brier_score > 0.25
-    if ll_bad or br_bad:
+    if ll_bad and br_bad:
         out.append(Finding(
             "PROBABILITIES_WORSE_THAN_CONSTANT", "warning",
             "Probability quality is worse than predicting 0.5 for every sample",
