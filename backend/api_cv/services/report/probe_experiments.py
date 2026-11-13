@@ -225,6 +225,28 @@ def stable_wilcoxon_greater(reference_scores, reduced_scores) -> dict[str, Any]:
     return {"W": W, "z": z, "p_raw": p_raw, "log10_p": log10_p, "p_report": p_report}
 
 
+def holm_log10(log10_p, tested=None) -> np.ndarray:
+    """
+    Holm step-down adjustment in log10 space (no underflow for p ~ 1e-300 and below).
+
+    `tested` marks the comparisons that belong to the family (default: non-NaN entries).
+    A tested entry with NaN log10 p (e.g. all paired differences zero) counts as p = 1:
+    it enlarges the family size m and gets adjusted log10 p = 0. Untested entries stay NaN.
+    -inf (p underflowed even in log space) is a valid, smallest p.
+    """
+    lp = np.asarray(log10_p, dtype=float)
+    tested = ~np.isnan(lp) if tested is None else np.asarray(tested, dtype=bool)
+    idx = np.flatnonzero(tested)
+    vals = np.where(np.isnan(lp[idx]), 0.0, lp[idx])
+    m = idx.size
+    adj = np.full(lp.shape, np.nan)
+    running = -np.inf
+    for k, j in enumerate(np.argsort(vals, kind="stable")):  # smallest p first
+        running = max(running, vals[j] + math.log10(m - k))
+        adj[idx[j]] = min(running, 0.0)
+    return adj
+
+
 # ------------------------------------------------------------------
 # Probe models
 # ------------------------------------------------------------------
@@ -331,17 +353,27 @@ def run_ablation_study(
     for name in df_ablation["Configuration"]:
         if name == ref_name:
             stats = {"W": np.nan, "z": np.nan, "p_raw": np.nan, "log10_p": np.nan, "p_report": "Reference"}
+            effect_r = np.nan
         else:
             stats = stable_wilcoxon_greater(group_scores[ref_name], group_scores[name])
+            # effect size r = z / sqrt(n), n = non-zero (finite) paired differences
+            d = np.asarray(group_scores[ref_name], dtype=float) - np.asarray(group_scores[name], dtype=float)
+            n_nz = int(np.count_nonzero(np.isfinite(d) & (d != 0)))
+            effect_r = stats["z"] / math.sqrt(n_nz) if n_nz and np.isfinite(stats["z"]) else np.nan
         wilcoxon_rows.append({
             "Configuration": name,
             "Wilcoxon_W": stats["W"],
             "Wilcoxon_z_approx": stats["z"],
+            "effect_r": effect_r,
             "p_raw": stats["p_raw"],
             "log10_p": stats["log10_p"],
             "p_for_manuscript": stats["p_report"],
         })
     df_wilcoxon = pd.DataFrame(wilcoxon_rows)
+    # Holm over the comparisons against the reference (the reference row itself is not a test)
+    df_wilcoxon["log10_p_holm"] = holm_log10(
+        df_wilcoxon["log10_p"].to_numpy(), tested=(df_wilcoxon["Configuration"] != ref_name).to_numpy()
+    )
     df_ablation["Wilcoxon p vs 11D"] = df_wilcoxon["p_for_manuscript"].to_numpy()
 
     # A publishable table must never contain a blank significance result.

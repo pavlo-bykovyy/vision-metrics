@@ -9,6 +9,7 @@ from sqlalchemy.orm import joinedload
 
 from shared.database import SessionLocal, engine
 from shared import models, enums
+from shared.exceptions import TaskCancelledError
 from shared.utils.logger import get_logger
 from api_cv.services.celery_app import celery_app
 
@@ -174,10 +175,17 @@ def worker_evaluate(self, evaluation_id: int):
         evaluation_record = _fetch_evaluation_data(evaluation_id)
 
         def is_cancelled():
-            db.refresh(evaluation_record)
-            if evaluation_record.status == enums.TaskStatus.CANCELLED:
-                return True
-            return False
+            # evaluation_record is detached (expunged), so poll the status in a short-lived session.
+            s = SessionLocal()
+            try:
+                status = (
+                    s.query(models.Evaluation.status)
+                    .filter(models.Evaluation.id == evaluation_id)
+                    .scalar()
+                )
+                return status == enums.TaskStatus.CANCELLED
+            finally:
+                s.close()
 
         # ---------------------------------------------------------
         # CRITICAL: LOCAL IMPORT
@@ -193,6 +201,10 @@ def worker_evaluate(self, evaluation_id: int):
         )
 
         _save_results(evaluation_id, raw_metrics)
+
+    except TaskCancelledError:
+        # Status is already CANCELLED (set by the API); don't overwrite it with FAILED.
+        logger.info(f"Evaluation {evaluation_id} was cancelled by the user.")
 
     except Exception as e:
         logger.warning(f"Worker failed for evaluation_id {evaluation_id}: {e}")

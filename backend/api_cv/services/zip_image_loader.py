@@ -54,6 +54,23 @@ def extract_and_cleanup_zip(dataset_path: str, extract_base_dir: str):
             except Exception as e:
                 logger.warning(f"Failed to delete extracted directory {extract_dir}: {e}")
 
+def require_explicit_binary_mapping(class_mapping, model_output_dim):
+    """
+    Refuses to auto-generate a class mapping for a single-output (sigmoid) model.
+
+    An alphabetical mapping would silently decide which folder/label is the positive class
+    (e.g. fake=0, real=1), which can invert the score polarity and every derived metric.
+
+    Raises:
+        ValueError: If the model has a single output and no explicit mapping is available.
+    """
+    if not class_mapping and model_output_dim == 1:
+        raise ValueError(
+            "Binary model requires an explicit class_mapping (which folder is class 1). "
+            "Set class_mapping on the model or mapping_config on the dataset."
+        )
+
+
 def resolve_class_mapping(evaluation, dataset):
     """
     Determines the appropriate class mapping to use for evaluation.
@@ -78,7 +95,7 @@ def resolve_class_mapping(evaluation, dataset):
 
     return None
 
-def scan_dataset_directory(extract_dir: str, class_mapping: dict):
+def scan_dataset_directory(extract_dir: str, class_mapping: dict, model_output_dim: int | None = None):
     """
     Scans the extracted dataset directory, filters valid image files, and assigns labels.
 
@@ -89,6 +106,8 @@ def scan_dataset_directory(extract_dir: str, class_mapping: dict):
     Args:
         extract_dir (str): The root directory containing the extracted dataset.
         class_mapping (dict): A dictionary mapping class names to integer labels. Can be None.
+        model_output_dim (int, optional): Size of the model's last output dimension. When it is 1
+            (binary sigmoid model), an explicit class_mapping is required.
 
     Returns:
         tuple: A tuple containing:
@@ -97,8 +116,11 @@ def scan_dataset_directory(extract_dir: str, class_mapping: dict):
             - class_mapping (dict): The final class mapping dictionary used.
 
     Raises:
-        ValueError: If no valid image files are found after filtering.
+        ValueError: If no valid image files are found after filtering, or if a binary model
+            has no explicit class_mapping.
     """
+    require_explicit_binary_mapping(class_mapping, model_output_dim)
+
     valid_files = []
     raw_labels = []
 
@@ -178,7 +200,8 @@ def create_tf_pipeline(valid_files: list, target_size: tuple, batch_size: int, f
 def process_zip_in_batches(evaluation,
                            target_size: tuple,
                            model,
-                           batch_size: int = EVAL_BATCH_SIZE):
+                           batch_size: int = EVAL_BATCH_SIZE,
+                           model_output_dim: int | None = None):
     """
     Orchestrates the evaluation pipeline by extracting a ZIP dataset, processing images in batches,
     and generating model predictions.
@@ -193,6 +216,8 @@ def process_zip_in_batches(evaluation,
         target_size (tuple): The target dimensions (height, width) to which input images will be resized.
         model: The loaded machine learning model used to generate predictions.
         batch_size (int, optional): The number of images to process in each batch. Defaults to 32.
+        model_output_dim (int, optional): Size of the model's last output dimension, used to
+            reject binary models without an explicit class mapping.
 
     Returns:
         models.PredictionResult: An object encapsulating the true labels, predicted probabilities,
@@ -204,7 +229,9 @@ def process_zip_in_batches(evaluation,
 
     with extract_and_cleanup_zip(dataset_path, EXTRACT_BASE_DIR) as extract_dir:
         initial_mapping = resolve_class_mapping(evaluation, dataset)
-        valid_files, all_y_true, final_mapping = scan_dataset_directory(extract_dir, initial_mapping)
+        valid_files, all_y_true, final_mapping = scan_dataset_directory(
+            extract_dir, initial_mapping, model_output_dim=model_output_dim
+        )
 
         logger.info(f"Found {len(valid_files)} valid images. Starting tf.data.Dataset pipeline...")
 

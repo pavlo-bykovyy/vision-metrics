@@ -64,7 +64,8 @@ def load_and_evaluate_model(evaluation: models.Evaluation,
         model=model,
         target_size=target_size,
         batch_size=EVAL_BATCH_SIZE,
-        cancel_check_callback=cancel_check_callback
+        cancel_check_callback=cancel_check_callback,
+        model_output_dim=last_dim
     )
 
     logger.info("Step 3b: Calculating metrics...")

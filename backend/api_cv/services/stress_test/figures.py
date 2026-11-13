@@ -21,7 +21,7 @@ METRIC_LABELS = {
     "balanced_accuracy": "Balanced Accuracy",
     "mcc": "MCC",
     "roc_auc": "ROC AUC",
-    "pr_auc": "PR AUC",
+    "pr_auc": "AP",  # average precision (sklearn.average_precision_score), as in the paper
     "log_loss_value": "Log Loss",
     "brier_score": "Brier Score",
 }
@@ -72,12 +72,18 @@ def _pyplot():
 
 
 class _FigureWriter:
-    def __init__(self, fig_dir: Path, formats: Iterable[str], dpi: int):
+    def __init__(self, fig_dir: Path, formats: Iterable[str], dpi: int, titles: bool = False):
         self.fig_dir = fig_dir
         self.formats = tuple(formats)
         self.dpi = dpi
+        self.titles = titles
         self.saved: list[Path] = []
         fig_dir.mkdir(parents=True, exist_ok=True)
+
+    def title(self, ax, text: str) -> None:
+        """In-figure titles are off by default: the MDPI captions already carry them."""
+        if self.titles:
+            ax.set_title(text)
 
     def save(self, plt, fig, name: str) -> None:
         for ext in self.formats:
@@ -145,7 +151,7 @@ def _trajectories(plt, w, summary, path_label, metrics, title, xlabel, name, inv
         ax.axhline(0.5, linestyle="--", linewidth=1)
     ax.set_xlabel(xlabel)
     ax.set_ylabel("Monte Carlo mean")
-    ax.set_title(title)
+    w.title(ax, title)
     ax.legend(ncol=2)
     ax.grid(alpha=0.2)
     fig.tight_layout()
@@ -164,7 +170,7 @@ def _calibration(plt, w, summary, metric, ylabel, name):
         ax.plot(xdf["severity"], xdf["mean"], marker="o", linewidth=2, label=label)
     ax.set_xlabel("Calibration degradation severity λ")
     ax.set_ylabel(ylabel)
-    ax.set_title(f"{ylabel} response to probability calibration degradation")
+    w.title(ax, f"{ylabel} response to probability calibration degradation")
     ax.legend()
     ax.grid(alpha=0.2)
     fig.tight_layout()
@@ -177,11 +183,13 @@ def generate_publication_figures(
     formats: Iterable[str] = ("png", "pdf", "svg"),
     dpi: int = 600,
     log: Callable[[str], None] = lambda _msg: None,
+    titles: bool = False,
 ) -> list[Path]:
-    """Draws every figure whose source CSV exists in `results_dir`; returns saved paths."""
+    """Draws every figure whose source CSV exists in `results_dir`; returns saved paths.
+    In-figure titles are omitted unless `titles=True` (MDPI captions duplicate them)."""
     plt = _pyplot()
     results_dir = Path(results_dir)
-    w = _FigureWriter(fig_dir or results_dir / "publication_figures", formats, dpi)
+    w = _FigureWriter(fig_dir or results_dir / "publication_figures", formats, dpi, titles)
 
     def read(name: str, **kw) -> Optional[pd.DataFrame]:
         path = results_dir / name
@@ -202,7 +210,7 @@ def generate_publication_figures(
         ax.set_ylabel("Metric value")
         ax.set_ylim(0, 1)
         ax.set_xticks(sorted(df["prevalence"].unique()))
-        ax.set_title("Baseline metric behavior under changing class prevalence")
+        w.title(ax, "Baseline metric behavior under changing class prevalence")
         ax.legend(frameon=True, ncol=2)
         ax.grid(alpha=0.2)
         fig.tight_layout()
@@ -222,7 +230,7 @@ def generate_publication_figures(
         ax.set_ylim(0, 1)
         ax.set_xlabel("Failure severity")
         ax.set_ylabel("Cross-validated performance")
-        ax.set_title("Diagnostic distinguishability increases with failure severity")
+        w.title(ax, "Diagnostic distinguishability increases with failure severity")
         ax.legend()
         ax.grid(axis="y", alpha=0.2)
         fig.tight_layout()
@@ -246,7 +254,7 @@ def generate_publication_figures(
         ax.set_ylim(0, 1)
         ax.set_ylabel("5-fold cross-validated Balanced Accuracy")
         ax.set_xlabel("Metric family")
-        ax.set_title("Diagnostic contribution of complementary metric families")
+        w.title(ax, "Diagnostic contribution of complementary metric families")
         for bar, mean, sd in zip(bars, stats["mean"], stats["sd"]):
             ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.03,
                     f"{mean:.3f}\n±{sd:.3f}", ha="center", va="bottom", fontsize=9)
@@ -274,7 +282,7 @@ def generate_publication_figures(
         ax.set_ylabel("Balanced Accuracy on unseen prevalence")
         ax.set_ylim(0, 1)
         ax.set_xticks(sorted(loo["heldout_prevalence"].unique()))
-        ax.set_title("Generalization of failure diagnostics to unseen class prevalence")
+        w.title(ax, "Generalization of failure diagnostics to unseen class prevalence")
         ax.legend()
         ax.grid(alpha=0.2)
         fig.tight_layout()
@@ -290,7 +298,7 @@ def generate_publication_figures(
         ax.set_yticklabels([FAMILY_LABELS.get(v, v) for v in matrix.index])
         ax.set_xlabel("Held-out positive-class prevalence")
         ax.set_ylabel("Metric family")
-        ax.set_title("Out-of-prevalence diagnostic robustness")
+        w.title(ax, "Out-of-prevalence diagnostic robustness")
         for i in range(matrix.shape[0]):
             for j in range(matrix.shape[1]):
                 value = matrix.iloc[i, j]
@@ -317,7 +325,7 @@ def generate_publication_figures(
         _heatmap_axes(ax, matrix, METRIC_LABELS, FAILURE_LABELS)
         ax.set_xlabel("Evaluation metric")
         ax.set_ylabel("Failure mode")
-        ax.set_title("Multi-metric diagnostic signatures of classifier failure modes")
+        w.title(ax, "Multi-metric diagnostic signatures of classifier failure modes")
         fig.colorbar(im, ax=ax).set_label(
             "Normalized endpoint response" if normalized else "Standardized response"
         )
@@ -339,7 +347,7 @@ def generate_publication_figures(
                 ax.text(j, i, f"{norm[i, j]:.2f}", ha="center", va="center", fontsize=8)
         ax.set_xlabel("Predicted failure mode")
         ax.set_ylabel("True failure mode")
-        ax.set_title("Cross-validated distinguishability of classifier failure modes")
+        w.title(ax, "Cross-validated distinguishability of classifier failure modes")
         fig.colorbar(im, ax=ax).set_label("Row-normalized proportion")
         fig.tight_layout()
         w.save(plt, fig, "Figure_09_failure_mode_confusion_matrix")
@@ -354,7 +362,7 @@ def generate_publication_figures(
         _heatmap_axes(ax, matrix, METRIC_LABELS, FAILURE_LABELS)
         ax.set_xlabel("Metric")
         ax.set_ylabel("Failure mode")
-        ax.set_title("Monotonic sensitivity of evaluation metrics to failure severity")
+        w.title(ax, "Monotonic sensitivity of evaluation metrics to failure severity")
         fig.colorbar(im, ax=ax).set_label("Mean Spearman correlation with severity λ")
         fig.tight_layout()
         w.save(plt, fig, "Figure_10_metric_sensitivity_heatmap")

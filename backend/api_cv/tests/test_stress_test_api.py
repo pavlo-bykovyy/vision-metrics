@@ -152,6 +152,8 @@ def test_files_tables_and_traversal(db, dispatched):
 
     gz = service.read_table(run, "raw.csv.gz", limit=4)
     assert gz.total_rows == 10 and gz.truncated and len(gz.rows) == 4
+    exact = service.read_table(run, "raw.csv.gz", limit=10)
+    assert exact.total_rows == 10 and not exact.truncated and len(exact.rows) == 10
 
     for bad in ("../run_999/x.csv", "/etc/passwd", "missing.csv"):
         with pytest.raises(HTTPException):

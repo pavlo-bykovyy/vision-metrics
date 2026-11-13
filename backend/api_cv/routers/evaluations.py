@@ -6,12 +6,8 @@ from sqlalchemy.orm import Session
 
 from shared import models, schemas
 from api_cv.services import services
-from api_cv.services.report import (
-    load,
-    build_report,
-    to_html,
-    to_markdown,
-)
+from api_cv.services.report import build_report, to_html, to_markdown
+from api_cv.services.report.report import load
 from shared.database import get_db
 from shared.dependencies import verify_token
 from shared.utils.logger import get_logger

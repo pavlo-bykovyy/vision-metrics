@@ -221,15 +221,22 @@ def _json_cell(value):
     return value
 
 
+def _count_rows(path: Path, chunksize: int = 100_000) -> int:
+    """Data rows in a CSV, parsed in chunks of the first column only (handles quoted newlines)."""
+    with pd.read_csv(path, usecols=[0], dtype=str, chunksize=chunksize) as reader:
+        return sum(len(chunk) for chunk in reader)
+
+
 def read_table(run: models.StressTestRun, name: str, limit: int) -> schemas.StressTestTable:
     path = resolve_file(run, name)
     if _file_kind(path.name) != "table":
         raise HTTPException(status_code=400, detail="Not a table file")
 
-    df = pd.read_csv(path)
+    # Parse only the preview rows; raw Monte Carlo results run to hundreds of thousands of rows.
+    df = pd.read_csv(path, nrows=limit)
     df.columns = ["" if str(c).startswith("Unnamed:") else str(c) for c in df.columns]
-    total = len(df)
-    head = df.head(limit).astype(object)
+    total = len(df) if len(df) < limit else _count_rows(path)
+    head = df.astype(object)
     rows = [[_json_cell(v) for v in row] for row in head.itertuples(index=False, name=None)]
 
     return schemas.StressTestTable(

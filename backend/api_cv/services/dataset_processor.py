@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from shared import models, enums
 from shared.utils.logger import get_logger
 from shared.exceptions import TaskCancelledError
-from api_cv.services.zip_image_loader import process_zip_in_batches
+from api_cv.services.zip_image_loader import process_zip_in_batches, require_explicit_binary_mapping
 
 
 logger = get_logger(__name__)
@@ -94,11 +94,15 @@ def get_predictions(evaluation: models.Evaluation,
                     target_size: tuple,
                     batch_size: int,
                     cancel_check_callback=None,
-                    preprocess_fn=None):
+                    preprocess_fn=None,
+                    model_output_dim: int | None = None):
     """
     Loads the dataset (ZIP or CSV) and returns the true labels, model predictions,
     and dynamically generated class mapping.
     Uses tf.data.Dataset for multi-threaded, fast image loading in tabular format.
+
+    For a binary model (model_output_dim == 1) an explicit class mapping (model.class_mapping
+    or dataset.mapping_config) is required: an alphabetical fallback could invert polarity.
     """
     dataset = evaluation.dataset
     dataset_path = dataset.file_artifact.file_path
@@ -113,7 +117,8 @@ def get_predictions(evaluation: models.Evaluation,
             evaluation=evaluation,
             target_size=target_size,
             model=model,
-            batch_size=batch_size
+            batch_size=batch_size,
+            model_output_dim=model_output_dim
         )
     else:
         logger.info("Tabular format detected. Loading images via optimized tf.data pipeline...")
@@ -152,6 +157,7 @@ def get_predictions(evaluation: models.Evaluation,
             logger.warning("Model class mapping is missing. Falling back to dataset's mapping_config.")
             class_mapping = dataset.mapping_config
         else:
+            require_explicit_binary_mapping(None, model_output_dim)
             unique_classes = sorted(list(unique_dataset_classes))
             class_mapping = {cls_name: idx for idx, cls_name in enumerate(unique_classes)}
             logger.warning(f"No mapping found in Model or Dataset. Dynamically generated mapping for CSV: {class_mapping}")

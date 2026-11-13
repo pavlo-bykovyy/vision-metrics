@@ -132,6 +132,32 @@ def test_reviewer_ablation_runs_on_tiny_data(tiny_raw):
     assert ablation["Wilcoxon p vs 11D"].str.len().gt(0).all()
 
 
+def test_full_profile_ba_agrees_between_ablation_pipelines(tiny_raw):
+    """
+    Regression guard: analysis.run_metric_family_ablation (full_panel) and
+    probe_experiments.run_ablation_study (full 11D reference) must train the same probe on the
+    same rows/folds. If either side changes its filtering, features, probe or CV, the pooled
+    out-of-fold BA of the full profile diverges here.
+    """
+    from api_cv.services.report.probe_experiments import FULL_11D, REFERENCE_SET
+
+    cfg, raw = tiny_raw
+    perf = analysis.run_metric_family_ablation(raw, n_splits=cfg.cv_splits)["performance"]
+    full = perf[(perf["metric_family"] == "full_panel") & (perf["scope"] == "overall")]
+    assert len(full) == 1
+
+    ablation, _ = reviewer.run_ablation_study(
+        reviewer.prepare_diagnostic_dataset(raw),
+        feature_sets={REFERENCE_SET: FULL_11D},
+        n_splits=cfg.cv_splits,
+        n_boot=10,
+        n_jobs=1,
+    )
+    assert int(full["n"].iloc[0]) == int((raw["severity"] > 0).sum())
+    # run_ablation_study reports BA rounded to 4 decimals
+    assert ablation.loc[0, "BA"] == round(float(full["balanced_accuracy"].iloc[0]), 4)
+
+
 def test_simulation_design_matches_notebook_rows():
     design = analysis.simulation_design_table(CFG)
     notebook = {

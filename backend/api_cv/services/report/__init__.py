@@ -19,7 +19,6 @@ from api_cv.services.report.probe_experiments import (
     run_diagnostic_model_comparison,
 )
 from api_cv.services.report.renderers import to_html, to_markdown
-from api_cv.services.report.report import load
 
 __all__ = [
     "DISCLAIMER",
@@ -34,7 +33,6 @@ __all__ = [
     "build_report",
     "compare_to_baseline",
     "compute_group_stats",
-    "load",
     "normalize_diagnostic_dataframe",
     "run_ablation_study",
     "run_all_experiments",

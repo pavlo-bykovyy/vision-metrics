@@ -39,6 +39,13 @@ def calculate_metrics(prediction_result: 'PredictionResult',
     mean_latency = processing_time / len(y_true)
     weights_size = os.path.getsize(weights_path) if os.path.exists(weights_path) else 0
 
+    y_pred_probs = np.asarray(y_pred_probs)
+    if last_dim == 2:
+        # Binary softmax head: reduce to P(class 1) so it gets the same binary metrics
+        # (TN/FP/FN/TP, Brier, binary averaging) as a single-sigmoid model.
+        y_pred_probs = y_pred_probs.reshape(len(y_true), 2)[:, 1:2]
+        last_dim = 1
+
     if last_dim == 1:
         y_pred = (y_pred_probs > 0.5).astype(int).flatten()
         y_score = y_pred_probs.flatten()
