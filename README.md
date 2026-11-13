@@ -2,12 +2,12 @@
 
 A comprehensive system for evaluating Computer Vision models and LLMs (including LoRA adapters and adversarial attack scenarios). The project uses Docker containerization to manage the APIs, background workers (Celery), the database, and the message broker (Redis).
 
-## 🛠 Prerequisites
+## Prerequisites
 
 To deploy and develop locally, you will need the following installed on your machine:
 
-* [Docker](https://docs.docker.com/get-docker/)
-* [Docker Compose](https://docs.docker.com/compose/install/)
+- [Docker](https://docs.docker.com/get-docker/)
+- [Docker Compose](https://docs.docker.com/compose/install/)
 
 ---
 
@@ -47,7 +47,7 @@ Once completed, the APIs, Celery workers, database, and Redis will be up and run
 
 ---
 
-## 🗄️ Database Migrations (Alembic)
+## Database Migrations (Alembic)
 
 Database schema changes are managed with Alembic. All commands must be executed inside the `visionmetrics_api` container.
 
@@ -77,7 +77,7 @@ docker cp visionmetrics_api:/app/migrations/versions/. ./backend/migrations/vers
 
 ---
 
-## 🔧 Useful Commands
+## Useful Commands
 
 **Clear the Redis cache / flush Celery queues**
 
@@ -89,26 +89,22 @@ docker exec -it visionmetrics_redis redis-cli flushall
 
 ---
 
-Ось оновлений розділ документації, куди акуратно інтегровано нові інструкції для збирання ізольованого тестового образу та запуску через чистий `docker`:
-
-```markdown
-## 🧪 Running Tests (`pytest`)
+## Running Tests (`pytest`)
 
 Unit and regression tests are located in `backend/api_llm/tests/`. They use an isolated in-memory SQLite database (`conftest.py`) and temporary directories, so they do **not** require a running PostgreSQL, Redis, or GPU instance.
 
 ### Option 1: Run inside the Docker container
+
 If the stack is running via Docker Compose:
 
 ```bash
 docker exec -it visionmetrics_api pytest api_llm/tests/ -v
-
 ```
 
 Or in a one-off container without starting the full stack:
 
 ```bash
 docker compose run --rm -v ./backend:/app api pytest api_llm/tests/ -v
-
 ```
 
 ### Option 2: Run via a dedicated test image (Standalone Docker)
@@ -128,10 +124,9 @@ docker build -f backend/Dockerfile.api \
 # 3. Run tests
 docker run --rm -v "$PWD/backend:/app" visionmetrics_api:test \
     pytest api_llm/tests/ -v
-
 ```
 
-> **How it works:** `--build-context base_image=...` replaces `FROM base_image` in `Dockerfile.api` with the freshly built `:test` image, mirroring how Compose handles `additional_contexts`.
+> **How it works:** `--build-context visionmetrics_base_image:latest=...` replaces `FROM visionmetrics_base_image:latest` in `Dockerfile.api` with the freshly built `:test` image, mirroring how Compose handles `additional_contexts`.
 
 ### Option 3: Run locally on the host (Python virtual environment)
 
@@ -143,7 +138,6 @@ source .venv/bin/activate
 pip install -r backend/config/requirements_base.txt -r backend/config/requirements_api.txt
 
 PYTHONPATH=backend pytest backend/api_llm/tests/ -v
-
 ```
 
 ### Running a specific test file or test case
@@ -155,69 +149,69 @@ PYTHONPATH=backend pytest backend/api_llm/tests/test_attacks_and_evaluation.py -
 # Run only chat ModelManager tests (Docker example)
 docker run --rm -v "$PWD/backend:/app" visionmetrics_api:test \
     pytest api_llm/tests/test_model_manager.py -v
-
 ```
 
 ### Docker Test Tips & Nuances
 
-* **Code Mount (`-v`):** Without `-v`, tests run against the static code baked into the image during build time (`COPY . .`). With `-v`, your current local code is mounted directly, meaning you only need to rebuild the image if your requirements change.
-* **Fast Rebuilds:** After the initial run, Step 1 is almost instantaneous (`CACHED`) as long as `requirements_base*.txt` remain unchanged.
-* **Environment Variables:** If your tests require variables from `.env.*` files, pass them directly into `docker run`:
+- **Code Mount (`-v`):** Without `-v`, tests run against the static code baked into the image during build time (`COPY . .`). With `-v`, your current local code is mounted directly, meaning you only need to rebuild the image if your requirements change.
+- **Fast Rebuilds:** After the initial run, Step 1 is almost instantaneous (`CACHED`) as long as `requirements_base*.txt` remain unchanged.
+- **Environment Variables:** If your tests require variables from `.env.*` files, pass them directly into `docker run`:
+
 ```bash
 docker run --rm --env-file .env.shared --env-file .env.api -v "$PWD/backend:/app" visionmetrics_api:test pytest api_llm/tests/ -v
-
 ```
 
+---
 
 ## Project Structure
 
 The backend follows a layered architecture: HTTP handling, business logic, background workers, and domain logic each live in their own place.
 
-```
+```text
 backend/
-├── shared/                          # Code shared by api_cv and api_llm
-│   ├── database.py                  # Engine, SessionLocal, Base
-│   ├── models.py                    # SQLAlchemy ORM models
+├── shared/                           # Code shared by api_cv and api_llm
+│   ├── database.py                   # Engine, SessionLocal, Base
+│   ├── models.py                     # SQLAlchemy ORM models
 │   ├── enums.py
 │   ├── dtos.py
 │   └── utils/
 │
-├── api_cv/                          # Computer Vision API
+├── api_cv/                           # Computer Vision API
 │
-└── api_llm/                         # LLM API
-    ├── main.py                      # FastAPI app, router registration
-    ├── celery_app.py                # Single source of Celery config and task routing
-    ├── queues.py                    # Constants for Celery task and queue names
+└── api_llm/                          # LLM API
+    ├── main.py                       # FastAPI app, router registration
+    ├── celery_app.py                 # Single source of Celery config and task routing
+    ├── queues.py                     # Constants for Celery task and queue names
     │
-    ├── routers/                     # HTTP layer only: parse request, call service, return response
+    ├── routers/                      # HTTP layer only: parse request, call service, return response
     │   ├── attacks.py
     │   ├── lora_adapters.py
     │   ├── judges.py
     │   └── ...
     │
-    ├── schemas/                     # Pydantic request/response models
+    ├── schemas/                      # Pydantic request/response models
     │   └── attacks.py
     │
-    ├── services/                    # Business logic invoked by routers
+    ├── services/                     # Business logic invoked by routers
     │   ├── attack_service.py
     │   ├── evaluation_queue_service.py   # Dispatching tasks to Celery
     │   ├── judge_task_runs_services.py
     │   └── ...
     │
-    ├── workers/                     # Thin Celery tasks: engine.dispose() + call domain logic
+    ├── workers/                      # Thin Celery tasks: engine.dispose() + call domain logic
     │   ├── attacks/
-    │   │   ├── attack_worker.py # attack.generate
-    │   │   └── judge_worker.py      # attack.judge
-    │   └── ...                      # llm.evaluation, llm.judge.evaluation, chat.generate_text
+    │   │   ├── attack_worker.py      # attack.generate
+    │   │   └── judge_worker.py       # attack.judge
+    │   └── ...                       # llm.evaluation, llm.judge.evaluation, chat.generate_text
     │
-    ├── attacks/                     # Attack domain logic (no HTTP, no Celery)
-    │   ├── attack_library.py        # Scenario generation (intents, techniques, languages)
-    │   └── attack_scoring.py        # Canary check, judge prompt, ASR aggregation
-    ├── evaluation/                  # Generation, inference, result building
-    ├── judge/                       # LLM-as-a-Judge: inference, model loading, task logic
-    ├── lora/                        # LoRA adapter loading and management
-    ├── base_model/                  # Base model handling
-    └── datasets/                    # Dataset reading and parsing (JSONL, CSV)
+    ├── attacks/                      # Attack domain logic (no HTTP, no Celery)
+    │   ├── attack_library.py         # Scenario generation (intents, techniques, languages)
+    │   └── attack_scoring.py         # Canary check, judge prompt, ASR aggregation
+    ├── evaluation/                   # Generation, inference, result building
+    ├── judge/                        # LLM-as-a-Judge: inference, model loading, task logic
+    ├── lora/                         # LoRA adapter loading and management
+    ├── base_model/                   # Base model handling
+    └── datasets/                     # Dataset reading and parsing (JSONL, CSV)
 ```
 
 ### Layer responsibilities
@@ -258,3 +252,11 @@ Tasks sent to a queue without a running worker will remain pending in Redis.
 1. `POST /attacks/datasets` generates a JSONL dataset of attack scenarios (intent × technique × language).
 2. `POST /attacks/runs` creates an evaluation task and dispatches `attack.generate`, followed by one `attack.judge` task per selected judge.
 3. `GET /attacks/runs/{task_id}/summary` returns the Attack Success Rate (ASR), overall and broken down by metric category, attack technique, and language.
+
+---
+
+## Contributors & Development Team
+
+- **[pavlo-bykovyy](https://github.com/pavlo-bykovyy)** — Core Developer
+- **[Khrystyna-LH](https://github.com/Khrystyna-LH)** — Co-author & Developer
+- **[myrko1979-pixel](https://github.com/myrko1979-pixel)** — Co-author & Developer
